@@ -430,11 +430,11 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         return (
                           <th
                             key={month}
-                            className={`px-1 py-2 text-center text-sm font-bold transition-opacity ${
+                            className={`px-1 py-2 text-center text-sm font-bold transition-all ${
                               isFromReport
                                 ? 'bg-yellow-200 text-yellow-900 ring-2 ring-yellow-400'
                                 : isDimmed
-                                  ? 'text-gray-400 opacity-40'
+                                  ? 'bg-gray-400/30 text-gray-400 grayscale'
                                   : 'text-gray-700'
                             }`}
                           >
@@ -460,7 +460,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const isFromReport = isReportHighlight(month);
                         const isDimmed = shouldDimColumn(month);
                         return (
-                          <td key={month} className={`px-1 py-3 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-3 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {agg ? (
                               <div className={`text-lg font-bold py-1 rounded ${
                                 isFromReport
@@ -518,7 +518,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const actualHoldingMonths = calcMethod === 'openClose' ? holdingPeriod + 1 : holdingPeriod;
                         const avgPerMonth = trimmedReturn !== undefined ? trimmedReturn / actualHoldingMonths : null;
                         return (
-                          <td key={month} className={`px-1 py-3 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-3 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {avgPerMonth !== null ? (
                               <div className="flex items-center justify-center gap-1">
                                 <span className={`text-lg font-bold ${
@@ -584,7 +584,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const isFromReport = isReportHighlight(month);
                         const isDimmed = shouldDimColumn(month);
                         return (
-                          <td key={month} className={`px-1 py-2 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-2 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {agg ? (
                               <span className={`text-sm font-semibold ${
                                 agg.alpha >= 0.5 ? 'text-green-700' : agg.alpha <= -0.5 ? 'text-red-600' : 'text-gray-500'
@@ -627,7 +627,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const isFromReport = isReportHighlight(month);
                         const isDimmed = shouldDimColumn(month);
                         return (
-                          <td key={month} className={`px-1 py-1 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-1 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {agg ? (
                               <span className={`text-xs ${
                                 agg.avg_return >= 0 ? 'text-green-600' : 'text-red-600'
@@ -669,7 +669,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const isFromReport = isReportHighlight(month);
                         const isDimmed = shouldDimColumn(month);
                         return (
-                          <td key={month} className={`px-1 py-1 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-1 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {agg ? (
                               <span className="text-xs text-red-600">{agg.min_return.toFixed(1)}%</span>
                             ) : (
@@ -695,7 +695,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         const isFromReport = isReportHighlight(month);
                         const isDimmed = shouldDimColumn(month);
                         return (
-                          <td key={month} className={`px-1 py-1 text-center transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                          <td key={month} className={`px-1 py-1 text-center transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                             {agg ? (
                               <span className="text-xs text-green-600">{agg.max_return.toFixed(1)}%</span>
                             ) : (
@@ -723,11 +723,11 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                         return (
                           <td
                             key={month}
-                            className={`px-1 py-2 text-center text-sm font-medium transition-opacity ${
+                            className={`px-1 py-2 text-center text-sm font-medium transition-all ${
                               isFromReport
                                 ? 'bg-yellow-200 text-yellow-900'
                                 : isDimmed
-                                  ? 'text-gray-400 opacity-40'
+                                  ? 'bg-gray-400/30 text-gray-400 grayscale'
                                   : 'text-gray-600'
                             }`}
                           >
@@ -758,7 +758,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                             const isFromReport = isReportHighlight(month);
                             const isDimmed = shouldDimColumn(month);
                             return (
-                              <td key={month} className={`px-1 py-1 transition-opacity ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'opacity-40' : ''}`}>
+                              <td key={month} className={`px-1 py-1 transition-all ${isFromReport ? 'bg-yellow-100' : ''} ${isDimmed ? 'bg-gray-400/30 grayscale brightness-75' : ''}`}>
                                 {cell ? (
                                   <div
                                     onMouseMove={(e) => handleMouseMove(e, cell)}
