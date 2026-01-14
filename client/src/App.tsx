@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
-import { StockSearch } from './components/StockSearch';
+import { StockPicker } from './components/StockPicker';
 import { Heatmap } from './components/Heatmap';
 import { MaxCloseGrid } from './components/MaxCloseGrid';
-import { ViewToggle } from './components/ViewToggle';
 import { BestMonthsDrawer } from './components/BestMonthsDrawer';
 import { ScreenerPage } from './components/ScreenerPage';
 import { FavoritesPage } from './components/FavoritesPage';
+import { StockSummary, TickerSentiment } from './components/StockSummary';
+import { SentimentPage } from './components/SentimentPage';
 
 export type ViewMode = 'entry' | 'exit';
 export type Timeframe = 1 | 3 | 6 | 12;
 export type CalculationMethod = 'openClose' | 'maxMax';
-export type Page = 'search' | 'favorites' | 'top-periods' | 'upcoming';
+export type Page = 'search' | 'favorites' | 'top-periods' | 'upcoming' | 'my-tickers';
 
 export interface FilterCriteria {
   minWinRate: number;
@@ -19,8 +20,18 @@ export interface FilterCriteria {
 
 const TIMEFRAMES: Timeframe[] = [1, 3, 6, 12];
 const RECENT_SEARCHES_KEY = 'stock-researcher-recent-searches';
-const FAVORITES_KEY = 'stock-researcher-favorites';
 const MAX_RECENT_SEARCHES = 10;
+
+// Helper to parse favorite key into components for API calls
+function parseFavoriteKey(key: string): { ticker: string; month: number; holdingPeriod: number } | null {
+  const parts = key.split('-');
+  if (parts.length < 3) return null;
+  const holdingPeriod = parseInt(parts[parts.length - 1], 10);
+  const month = parseInt(parts[parts.length - 2], 10);
+  const ticker = parts.slice(0, -2).join('-');
+  if (isNaN(month) || isNaN(holdingPeriod) || month < 1 || month > 12) return null;
+  return { ticker, month, holdingPeriod };
+}
 
 function App() {
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
@@ -36,8 +47,12 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('search');
   const [isReportsExpanded, setIsReportsExpanded] = useState(true);
   const [isSearchExpanded, setIsSearchExpanded] = useState(true);
+  const [isRecentExpanded, setIsRecentExpanded] = useState(true);
   const [lastDataSync, setLastDataSync] = useState<string | null>(null);
   const [highlightCell, setHighlightCell] = useState<{ entryMonth: number; holdingPeriod: number } | null>(null);
+  const [yearsToShow, setYearsToShow] = useState(12);
+  const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down'>>({});
+  const [patternRatings, setPatternRatings] = useState<Record<string, number>>({});
 
   // Navigate to a page and push to browser history
   const navigateTo = (page: Page, ticker?: string | null, highlight?: { entryMonth: number; holdingPeriod: number } | null) => {
@@ -71,7 +86,7 @@ function App() {
     const hash = window.location.hash.slice(1); // Remove #
     if (hash) {
       const [page, ticker] = hash.split('/');
-      if (['search', 'favorites', 'top-periods', 'upcoming'].includes(page)) {
+      if (['search', 'favorites', 'top-periods', 'upcoming', 'my-tickers'].includes(page)) {
         setCurrentPage(page as Page);
         if (ticker) {
           setSelectedTicker(ticker);
@@ -109,16 +124,28 @@ function App() {
     }
   }, []);
 
-  // Load favorites from localStorage on mount
+  // Load favorites from API on mount
   useEffect(() => {
-    const saved = localStorage.getItem(FAVORITES_KEY);
-    if (saved) {
-      try {
-        setFavorites(new Set(JSON.parse(saved)));
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
+    fetch('/api/pattern-favorites/keys')
+      .then(res => res.json())
+      .then((keys: string[]) => setFavorites(new Set(keys)))
+      .catch(() => {});
+  }, []);
+
+  // Load pattern ratings from API on mount
+  useEffect(() => {
+    fetch('/api/pattern-favorites/ratings')
+      .then(res => res.json())
+      .then((ratings: Record<string, number>) => setPatternRatings(ratings))
+      .catch(() => {});
+  }, []);
+
+  // Fetch ticker sentiments from API on mount
+  useEffect(() => {
+    fetch('/api/ticker-sentiment')
+      .then(res => res.json())
+      .then(data => setTickerSentiments(data))
+      .catch(() => {});
   }, []);
 
   // Save recent searches to localStorage
@@ -142,18 +169,116 @@ function App() {
     saveRecentSearches([]);
   };
 
-  // Toggle favorite
-  const handleToggleFavorite = (key: string) => {
+  // Toggle favorite - persists to database via API
+  const handleToggleFavorite = async (key: string) => {
+    const parsed = parseFavoriteKey(key);
+    if (!parsed) return;
+
+    const isCurrentlyFavorite = favorites.has(key);
+
+    // Optimistically update UI
     setFavorites((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
+      if (isCurrentlyFavorite) {
         next.delete(key);
       } else {
         next.add(key);
       }
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify([...next]));
       return next;
     });
+
+    // Persist to API
+    try {
+      if (isCurrentlyFavorite) {
+        // Remove favorite
+        await fetch('/api/pattern-favorites', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticker: parsed.ticker,
+            entryMonth: parsed.month,
+            holdingPeriod: parsed.holdingPeriod,
+          }),
+        });
+      } else {
+        // Add favorite
+        await fetch('/api/pattern-favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticker: parsed.ticker,
+            entryMonth: parsed.month,
+            holdingPeriod: parsed.holdingPeriod,
+          }),
+        });
+      }
+    } catch {
+      // Revert on error by re-fetching
+      fetch('/api/pattern-favorites/keys')
+        .then(res => res.json())
+        .then((keys: string[]) => setFavorites(new Set(keys)))
+        .catch(() => {});
+    }
+  };
+
+  // Handle pattern rating change - persists to database via API
+  const handleRatingChange = async (key: string, rating: number | null) => {
+    // Optimistically update UI
+    setPatternRatings((prev) => {
+      const next = { ...prev };
+      if (rating === null) {
+        delete next[key];
+      } else {
+        next[key] = rating;
+      }
+      return next;
+    });
+
+    // Persist to API
+    try {
+      await fetch(`/api/pattern-favorites/key/${encodeURIComponent(key)}/rating`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating }),
+      });
+    } catch {
+      // Revert on error by re-fetching
+      fetch('/api/pattern-favorites/ratings')
+        .then(res => res.json())
+        .then((ratings: Record<string, number>) => setPatternRatings(ratings))
+        .catch(() => {});
+    }
+  };
+
+  // Handle ticker sentiment change
+  const handleSentimentChange = async (ticker: string, sentiment: TickerSentiment) => {
+    // Optimistically update UI
+    setTickerSentiments((prev) => {
+      if (sentiment === null) {
+        const { [ticker]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [ticker]: sentiment };
+    });
+
+    // Persist to API
+    try {
+      if (sentiment === null) {
+        await fetch(`/api/ticker-sentiment/${ticker}`, { method: 'DELETE' });
+      } else {
+        await fetch(`/api/ticker-sentiment/${ticker}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sentiment }),
+        });
+      }
+    } catch {
+      // Revert on error by re-fetching
+      fetch('/api/ticker-sentiment')
+        .then(res => res.json())
+        .then(data => setTickerSentiments(data))
+        .catch(() => {});
+    }
   };
 
   return (
@@ -177,15 +302,37 @@ function App() {
             }}
             className={`w-full text-left px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
               currentPage === 'favorites'
-                ? 'bg-yellow-600 text-white'
+                ? 'bg-pink-600 text-white'
                 : 'hover:bg-blue-600/50 text-blue-100'
             }`}
           >
-            <span className="text-lg">⭐</span>
+            <span className="text-lg">❤️</span>
             <span>Favorites</span>
             {favorites.size > 0 && (
-              <span className="ml-auto bg-yellow-500 text-gray-900 text-xs px-1.5 py-0.5 rounded-full font-medium">
+              <span className="ml-auto bg-pink-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
                 {favorites.size}
+              </span>
+            )}
+          </a>
+
+          {/* My Tickers (Sentiment) */}
+          <a
+            href="#my-tickers"
+            onClick={(e) => {
+              e.preventDefault();
+              navigateTo('my-tickers');
+            }}
+            className={`w-full text-left px-3 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+              currentPage === 'my-tickers'
+                ? 'bg-emerald-600 text-white'
+                : 'hover:bg-blue-600/50 text-blue-100'
+            }`}
+          >
+            <span className="text-lg">👍</span>
+            <span>My Tickers</span>
+            {Object.keys(tickerSentiments).length > 0 && (
+              <span className="ml-auto bg-emerald-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
+                {Object.keys(tickerSentiments).length}
               </span>
             )}
           </a>
@@ -270,72 +417,87 @@ function App() {
             </a>
 
             {isSearchExpanded && (
-              <div className="ml-4 mt-1">
-                {/* Quick Search Input */}
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const input = e.currentTarget.querySelector('input');
-                    const ticker = input?.value.trim().toUpperCase();
-                    if (ticker) {
+              <div className="ml-4 mt-1 space-y-1">
+                {/* Quick Search Input with Autocomplete */}
+                <div className="px-3 py-2">
+                  <StockPicker
+                    onSelect={(ticker) => {
                       handleSelectTicker(ticker);
                       navigateTo('search', ticker);
-                      if (input) input.value = '';
-                    }
-                  }}
-                  className="px-3 py-2"
-                >
-                  <input
-                    type="text"
-                    placeholder="Enter ticker..."
-                    className="w-full px-3 py-2 text-sm bg-blue-900/50 border border-blue-500/50 rounded-lg text-white placeholder-blue-300/60 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                    }}
+                    selected={null}
+                    variant="sidebar"
+                    showPrice={false}
                   />
-                </form>
-
-                <div className="flex items-center justify-between px-3 py-1">
-                  <span className="text-xs text-blue-200 uppercase tracking-wider">Recent</span>
-                  {recentSearches.length > 0 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClearRecent();
-                      }}
-                      className="text-xs text-blue-200 hover:text-red-300 transition-colors"
-                    >
-                      Clear
-                    </button>
-                  )}
                 </div>
 
-                {recentSearches.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-blue-300 italic">
-                    No recent searches
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {recentSearches.map((ticker) => (
-                      <a
-                        key={ticker}
-                        href={`#search/${ticker}`}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          navigateTo('search', ticker);
-                          handleSelectTicker(ticker);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between ${
-                          selectedTicker === ticker && currentPage === 'search'
-                            ? 'bg-blue-600/20 text-blue-400'
-                            : 'hover:bg-blue-600/40 text-blue-200'
-                        }`}
+                {/* Recent - Expandable child entry */}
+                <div>
+                  <button
+                    onClick={() => setIsRecentExpanded(!isRecentExpanded)}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors hover:bg-blue-600/40 text-blue-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>🕒</span>
+                      <span>Recent</span>
+                      {recentSearches.length > 0 && (
+                        <span className="text-xs bg-blue-600/30 px-1.5 rounded">
+                          {recentSearches.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {recentSearches.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClearRecent();
+                          }}
+                          className="text-xs text-blue-300 hover:text-red-300 transition-colors"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <span
+                        className={`transform transition-transform text-xs ${isRecentExpanded ? 'rotate-90' : ''}`}
                       >
-                        <span className="font-medium">{ticker}</span>
-                        {selectedTicker === ticker && currentPage === 'search' && (
-                          <span className="text-xs text-blue-400">Active</span>
-                        )}
-                      </a>
-                    ))}
-                  </div>
-                )}
+                        ▶
+                      </span>
+                    </div>
+                  </button>
+
+                  {isRecentExpanded && (
+                    <div className="ml-4 mt-1 space-y-1">
+                      {recentSearches.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-blue-300 italic">
+                          No recent searches
+                        </div>
+                      ) : (
+                        recentSearches.map((ticker) => (
+                          <a
+                            key={ticker}
+                            href={`#search/${ticker}`}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigateTo('search', ticker);
+                              handleSelectTicker(ticker);
+                            }}
+                            className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-between ${
+                              selectedTicker === ticker && currentPage === 'search'
+                                ? 'bg-blue-600/20 text-blue-400'
+                                : 'hover:bg-blue-600/40 text-blue-200'
+                            }`}
+                          >
+                            <span className="font-medium">{ticker}</span>
+                            {selectedTicker === ticker && currentPage === 'search' && (
+                              <span className="text-xs text-blue-400">Active</span>
+                            )}
+                          </a>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -391,6 +553,10 @@ function App() {
               handleSelectTicker(ticker);
               navigateTo('search', ticker, { entryMonth, holdingPeriod });
             }}
+            tickerSentiments={tickerSentiments}
+            onSentimentChange={handleSentimentChange}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 
@@ -403,6 +569,10 @@ function App() {
               navigateTo('search', ticker, { entryMonth, holdingPeriod });
             }}
             upcomingOnly
+            tickerSentiments={tickerSentiments}
+            onSentimentChange={handleSentimentChange}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
 
@@ -416,152 +586,169 @@ function App() {
               handleSelectTicker(ticker);
               navigateTo('search', ticker, { entryMonth: month, holdingPeriod });
             }}
+            ratings={patternRatings}
+            onRatingChange={handleRatingChange}
+          />
+        )}
+
+        {/* My Tickers (Sentiment) Page */}
+        {currentPage === 'my-tickers' && (
+          <SentimentPage
+            tickerSentiments={tickerSentiments}
+            onSentimentChange={handleSentimentChange}
+            onSelectTicker={(ticker) => {
+              handleSelectTicker(ticker);
+              navigateTo('search', ticker);
+            }}
           />
         )}
 
         {/* Search Page */}
         {currentPage === 'search' && (
           <>
-            {/* Header */}
-            <header className={`border-b sticky top-0 z-20 ${
-              viewMode === 'entry'
-                ? 'bg-blue-100/90 border-blue-200'
-                : 'bg-amber-100/90 border-amber-200'
-            } backdrop-blur-sm`}>
-              <div className="px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Seasonality Search</h2>
-                    <p className={`text-sm ${viewMode === 'entry' ? 'text-blue-600' : 'text-amber-600'}`}>
-                      {viewMode === 'entry' ? 'Entry Month View - When to BUY' : 'Exit Month View - When to SELL'}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <StockSearch onSelect={handleSelectTicker} selected={selectedTicker} />
-                    {selectedTicker && (
-                      <button
-                        onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-                        className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium shadow-sm ${
-                          isDrawerOpen
-                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                            : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
-                      >
-                        <span>{isDrawerOpen ? '✕' : '★'}</span>
-                        <span>{isDrawerOpen ? 'Hide Panel' : 'Best Months'}</span>
-                      </button>
-                    )}
-                  </div>
+            {/* Minimal Header */}
+            <header className="border-b sticky top-0 z-20 bg-white border-gray-200">
+              <div className="px-5 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-base font-semibold text-gray-900">Seasonality Search</h2>
+                  {selectedTicker && (
+                    <span className="text-sm text-gray-500">
+                      {viewMode === 'entry' ? 'Entry view' : 'Exit view'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <StockPicker onSelect={handleSelectTicker} selected={selectedTicker} />
+                  {selectedTicker && (
+                    <button
+                      onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+                      className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                        isDrawerOpen
+                          ? 'bg-gray-100 text-gray-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {isDrawerOpen ? '× Hide Panel' : '❤️ Best Months'}
+                    </button>
+                  )}
                 </div>
               </div>
             </header>
 
-        {/* View Mode Toggle + Calculation Method + Filters */}
-        <div className={`border-b ${
-          viewMode === 'entry'
-            ? 'bg-blue-100 border-blue-200'
-            : 'bg-amber-100 border-amber-200'
-        }`}>
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <ViewToggle mode={viewMode} onChange={setViewMode} />
-
-                {/* Calculation Method Toggle */}
-                <div className="flex items-center bg-white/80 rounded-lg border border-gray-300 p-1">
-                  <button
-                    onClick={() => setCalcMethod('openClose')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                      calcMethod === 'openClose'
-                        ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Open→Close
-                  </button>
-                  <button
-                    onClick={() => setCalcMethod('maxMax')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-                      calcMethod === 'maxMax'
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    Max→Max
-                  </button>
-                </div>
-              </div>
-
-              {/* Filter Controls */}
-              {selectedTicker && (
-                <div className="flex items-center gap-6 bg-white/50 rounded-lg px-4 py-2 border border-gray-200">
-                  <span className="text-sm font-medium text-gray-700">Highlight Patterns:</span>
-
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Win % &ge;</label>
-                    <input
-                      type="number"
-                      value={filters.minWinRate}
-                      onChange={(e) => setFilters(f => ({ ...f, minWinRate: Number(e.target.value) }))}
-                      className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min={0}
-                      max={100}
-                      step={5}
-                    />
-                    <span className="text-sm text-gray-500">%</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600">Avg Gain &ge;</label>
-                    <input
-                      type="number"
-                      value={filters.minAvgGain}
-                      onChange={(e) => setFilters(f => ({ ...f, minAvgGain: Number(e.target.value) }))}
-                      className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min={-50}
-                      max={50}
-                      step={0.5}
-                    />
-                    <span className="text-sm text-gray-500">%</span>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded">
-                    <span className="w-3 h-3 rounded ring-2 ring-purple-500 ring-offset-1 bg-purple-200"></span>
-                    <span>= Matches</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Content Area - Flex row for main + right panel */}
         <div className="flex-1 flex overflow-hidden">
           {/* Main Content */}
-          <main className={`flex-1 overflow-y-auto min-h-[calc(100vh-140px)] ${
-            viewMode === 'entry' ? 'bg-blue-50' : 'bg-amber-50'
-          }`}>
-            <div className="px-6 py-6">
+          <main className="flex-1 overflow-y-auto min-h-[calc(100vh-140px)] bg-gray-50">
+            <div className="px-5 py-4">
               {selectedTicker ? (
-                <div className="space-y-2">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">
-                    {selectedTicker} Seasonality Analysis
-                  </h2>
+                <div>
+                  {/* Sticky Filter Bar */}
+                  <div className="sticky top-0 z-10 bg-gray-50 -mx-5 px-5 py-3 mb-4 border-b border-gray-200 shadow-sm">
+                    <div className="flex items-center gap-4">
+                      {/* Years */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Years</span>
+                        <select
+                          value={yearsToShow}
+                          onChange={(e) => setYearsToShow(Number(e.target.value))}
+                          className="text-sm border border-gray-300 rounded px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value={8}>8</option>
+                          <option value={10}>10</option>
+                          <option value={12}>12</option>
+                          <option value={15}>15</option>
+                          <option value={20}>20</option>
+                        </select>
+                      </div>
+
+                      {/* View Mode */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">View</span>
+                        <select
+                          value={viewMode}
+                          onChange={(e) => setViewMode(e.target.value as ViewMode)}
+                          className="text-sm border border-gray-300 rounded px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="entry">Entry (Buy)</option>
+                          <option value="exit">Exit (Sell)</option>
+                        </select>
+                      </div>
+
+                      {/* Calculation Method */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Method</span>
+                        <select
+                          value={calcMethod}
+                          onChange={(e) => setCalcMethod(e.target.value as CalculationMethod)}
+                          className="text-sm border border-gray-300 rounded px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                          <option value="openClose">Open → Close</option>
+                          <option value="maxMax">Max → Max</option>
+                        </select>
+                      </div>
+
+                      <div className="w-px h-5 bg-gray-300" />
+
+                      {/* Highlight Filters */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Highlight</span>
+                        <div className="flex items-center gap-1 text-sm">
+                          <span className="text-gray-400">Win%≥</span>
+                          <input
+                            type="number"
+                            value={filters.minWinRate}
+                            onChange={(e) => setFilters(f => ({ ...f, minWinRate: Number(e.target.value) }))}
+                            className="w-12 px-1.5 py-1 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            min={0}
+                            max={100}
+                            step={5}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1 text-sm">
+                          <span className="text-gray-400">Avg≥</span>
+                          <input
+                            type="number"
+                            value={filters.minAvgGain}
+                            onChange={(e) => setFilters(f => ({ ...f, minAvgGain: Number(e.target.value) }))}
+                            className="w-12 px-1.5 py-1 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            min={-50}
+                            max={50}
+                            step={0.5}
+                          />
+                          <span className="text-gray-400">%</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 ml-2">
+                        <span className="w-3 h-3 rounded-sm bg-purple-100 border border-purple-400"></span>
+                        <span>matches</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stock Summary Header */}
+                  <StockSummary
+                    ticker={selectedTicker}
+                    sentiment={tickerSentiments[selectedTicker] || null}
+                    onSentimentChange={handleSentimentChange}
+                  />
 
                   {/* All Timeframes */}
-                  {TIMEFRAMES.map((timeframe, index) => (
-                    <Heatmap
-                      key={`${timeframe}-${calcMethod}`}
-                      ticker={selectedTicker}
-                      viewMode={viewMode}
-                      holdingPeriod={timeframe}
-                      calcMethod={calcMethod}
-                      defaultExpanded={index === 1 || (highlightCell?.holdingPeriod === timeframe)} // 3-month expanded by default, or if highlighted
-                      filters={filters}
-                      highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
-                    />
-                  ))}
+                  <div className="space-y-3">
+                    {TIMEFRAMES.map((timeframe, index) => (
+                      <Heatmap
+                        key={`${timeframe}-${calcMethod}-${yearsToShow}`}
+                        ticker={selectedTicker}
+                        viewMode={viewMode}
+                        holdingPeriod={timeframe}
+                        calcMethod={calcMethod}
+                        defaultExpanded={index === 1 || (highlightCell?.holdingPeriod === timeframe)} // 3-month expanded by default, or if highlighted
+                        filters={filters}
+                        highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
+                        yearsToShow={yearsToShow}
+                      />
+                    ))}
+                  </div>
 
                   {/* Max Close Price Grid - Separate Section */}
                   <MaxCloseGrid
@@ -622,7 +809,7 @@ function App() {
 
                   {/* Large Centered Search Box */}
                   <div className="w-full max-w-lg">
-                    <StockSearch
+                    <StockPicker
                       onSelect={handleSelectTicker}
                       selected={selectedTicker}
                       size="large"

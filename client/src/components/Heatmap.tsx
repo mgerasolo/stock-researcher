@@ -418,6 +418,27 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                     <col className="w-[70px]" /> {/* Avg column */}
                   </colgroup>
                   <thead>
+                    {/* Filter Indicator Row - shows above dimmed columns */}
+                    {isFilterActive && (
+                      <tr className="bg-gray-100/50">
+                        <td></td>
+                        {MONTHS.map((_, idx) => {
+                          const monthNum = idx + 1;
+                          const isDimmed = shouldDimColumn(monthNum);
+                          return (
+                            <td key={idx} className="px-0 py-0.5 text-center">
+                              {isDimmed && (
+                                <span className="text-[9px] text-gray-400 uppercase tracking-tight">
+                                  filtered
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td></td>
+                        <td></td>
+                      </tr>
+                    )}
                     {/* Month Headers */}
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                       <th className="px-3 py-2 text-left text-sm font-bold text-gray-700">
