@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS ticker_sentiment (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Pattern Favorites (heart + optional star rating)
+-- Pattern Favorites (heart + optional star rating + notes)
 CREATE TABLE IF NOT EXISTS pattern_favorites (
     id SERIAL PRIMARY KEY,
     ticker VARCHAR(10) NOT NULL,
@@ -169,6 +169,7 @@ CREATE TABLE IF NOT EXISTS pattern_favorites (
     holding_period INTEGER NOT NULL CHECK (holding_period IN (1, 3, 6, 12)),
     calc_method VARCHAR(20) NOT NULL CHECK (calc_method IN ('openClose', 'maxMax')),
     rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+    note VARCHAR(1000),  -- User notes for the pattern
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(ticker, entry_month, holding_period, calc_method)
 );

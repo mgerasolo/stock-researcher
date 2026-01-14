@@ -37,6 +37,8 @@ interface FavoritesPageProps {
   onSelectPattern: (ticker: string, month: number, holdingPeriod: number) => void;
   ratings?: Record<string, number>;
   onRatingChange?: (key: string, rating: number | null) => void;
+  notes?: Record<string, string>;
+  onNoteChange?: (key: string, note: string | null) => void;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -101,11 +103,58 @@ function StarRating({
   );
 }
 
-export function FavoritesPage({ favorites, onToggleFavorite, calcMethod, onSelectPattern, ratings = {}, onRatingChange }: FavoritesPageProps) {
+// Note Editor Component
+function NoteEditor({
+  note,
+  onSave,
+  onCancel,
+}: {
+  note: string;
+  onSave: (note: string | null) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(note);
+  const maxLength = 1000;
+
+  return (
+    <div className="mt-2 bg-yellow-50 rounded-lg p-3 border border-yellow-200" onClick={(e) => e.stopPropagation()}>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value.slice(0, maxLength))}
+        placeholder="Add your notes about this pattern..."
+        className="w-full h-24 p-2 text-sm border border-yellow-300 rounded resize-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+        autoFocus
+        data-testid="notes-input"
+      />
+      <div className="flex items-center justify-between mt-2">
+        <span className={`text-xs ${text.length >= maxLength ? 'text-red-500' : 'text-gray-500'}`} data-testid="char-counter">
+          {text.length}/{maxLength}
+        </span>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(text.trim() || null)}
+            className="px-3 py-1 text-sm bg-yellow-500 text-white rounded hover:bg-yellow-600"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function FavoritesPage({ favorites, onToggleFavorite, calcMethod, onSelectPattern, ratings = {}, onRatingChange, notes = {}, onNoteChange }: FavoritesPageProps) {
   const [patterns, setPatterns] = useState<FavoritePattern[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [sortBy, setSortBy] = useState<'month' | 'winRate' | 'avgReturn'>('month');
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null);
 
   // Parse favorites and fetch data
   useEffect(() => {
@@ -299,6 +348,7 @@ export function FavoritesPage({ favorites, onToggleFavorite, calcMethod, onSelec
                   <th className="px-4 py-3 font-semibold text-right">Avg/Mo</th>
                   <th className="px-4 py-3 font-semibold text-right">Total Avg</th>
                   <th className="px-4 py-3 font-semibold text-center">Rating</th>
+                  <th className="px-4 py-3 font-semibold">Notes</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -363,6 +413,41 @@ export function FavoritesPage({ favorites, onToggleFavorite, calcMethod, onSelec
                         />
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {editingNoteKey === p.key ? (
+                        <NoteEditor
+                          note={notes[p.key] || ''}
+                          onSave={(note) => {
+                            if (onNoteChange) onNoteChange(p.key, note);
+                            setEditingNoteKey(null);
+                          }}
+                          onCancel={() => setEditingNoteKey(null)}
+                        />
+                      ) : notes[p.key] ? (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingNoteKey(p.key);
+                          }}
+                          className="text-sm text-gray-600 max-w-xs truncate cursor-pointer hover:text-gray-900"
+                          title={notes[p.key]}
+                          data-testid="notes-field"
+                        >
+                          📝 {notes[p.key]}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingNoteKey(p.key);
+                          }}
+                          className="text-xs text-gray-400 hover:text-gray-600"
+                          data-testid="edit-note-button"
+                        >
+                          Add note
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={(e) => {
@@ -412,38 +497,45 @@ export function FavoritesPage({ favorites, onToggleFavorite, calcMethod, onSelec
                         {monthPatterns.map((p) => (
                           <div
                             key={p.key}
-                            className="flex items-center justify-between text-sm cursor-pointer hover:bg-pink-50 rounded px-2 py-1 -mx-2"
+                            className="text-sm cursor-pointer hover:bg-pink-50 rounded px-2 py-1 -mx-2"
                             onClick={() => onSelectPattern(p.ticker, p.month, p.holdingPeriod)}
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-blue-600">{p.ticker}</span>
-                              <span className="text-gray-500 text-xs">{p.holdingPeriod}mo</span>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-blue-600">{p.ticker}</span>
+                                <span className="text-gray-500 text-xs">{p.holdingPeriod}mo</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {p.winRate !== null && (
+                                  <span className={`text-xs font-medium ${
+                                    p.winRate >= 70 ? 'text-green-600' : 'text-gray-500'
+                                  }`}>
+                                    {p.winRate}%
+                                  </span>
+                                )}
+                                <StarRating
+                                  rating={ratings[p.key] ?? null}
+                                  onRate={onRatingChange ? (rating) => onRatingChange(p.key, rating) : undefined}
+                                  size="sm"
+                                />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggleFavorite(p.key);
+                                  }}
+                                  className="text-pink-500 hover:text-pink-600"
+                                >
+                                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                  </svg>
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {p.winRate !== null && (
-                                <span className={`text-xs font-medium ${
-                                  p.winRate >= 70 ? 'text-green-600' : 'text-gray-500'
-                                }`}>
-                                  {p.winRate}%
-                                </span>
-                              )}
-                              <StarRating
-                                rating={ratings[p.key] ?? null}
-                                onRate={onRatingChange ? (rating) => onRatingChange(p.key, rating) : undefined}
-                                size="sm"
-                              />
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleFavorite(p.key);
-                                }}
-                                className="text-pink-500 hover:text-pink-600"
-                              >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                </svg>
-                              </button>
-                            </div>
+                            {notes[p.key] && (
+                              <div className="mt-1 text-xs text-gray-500 truncate" title={notes[p.key]}>
+                                📝 {notes[p.key]}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

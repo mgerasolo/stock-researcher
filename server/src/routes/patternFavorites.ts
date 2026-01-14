@@ -10,6 +10,7 @@ interface PatternFavorite {
   holding_period: number;
   calc_method: 'openClose' | 'maxMax';
   rating: number | null;
+  note: string | null;
   created_at: Date;
 }
 
@@ -236,5 +237,66 @@ patternFavoritesRouter.patch('/key/:key/rating', async (req, res) => {
   } catch (error) {
     console.error('Error setting pattern rating:', error);
     res.status(500).json({ error: 'Failed to set pattern rating' });
+  }
+});
+
+// GET /api/pattern-favorites/notes - Get notes as a map for quick lookup
+// Returns: { "AAPL-3-6": "My note here", "TSLA-5-12": "Another note", ... } format
+patternFavoritesRouter.get('/notes', async (_req, res) => {
+  try {
+    const favorites = await query<PatternFavorite>(
+      `SELECT ticker, entry_month, holding_period, note FROM pattern_favorites WHERE note IS NOT NULL AND note != ''`
+    );
+    const notesMap: Record<string, string> = {};
+    favorites.forEach(f => {
+      if (f.note) {
+        notesMap[`${f.ticker}-${f.entry_month}-${f.holding_period}`] = f.note;
+      }
+    });
+    res.json(notesMap);
+  } catch (error) {
+    console.error('Error fetching pattern favorite notes:', error);
+    res.status(500).json({ error: 'Failed to fetch pattern favorite notes' });
+  }
+});
+
+// PATCH by key (TICKER-MONTH-PERIOD) - Update note
+patternFavoritesRouter.patch('/key/:key/note', async (req, res) => {
+  const keyParts = req.params.key.split('-');
+  if (keyParts.length < 3) {
+    return res.status(400).json({ error: 'Invalid key format. Expected TICKER-MONTH-PERIOD' });
+  }
+
+  const holdingPeriod = parseInt(keyParts[keyParts.length - 1], 10);
+  const month = parseInt(keyParts[keyParts.length - 2], 10);
+  const ticker = keyParts.slice(0, -2).join('-'); // Handle tickers with dashes
+
+  const { note } = req.body;
+
+  // Note can be null (to remove) or string up to 1000 chars
+  if (note !== null && typeof note !== 'string') {
+    return res.status(400).json({ error: 'Invalid note. Must be string or null' });
+  }
+
+  if (note && note.length > 1000) {
+    return res.status(400).json({ error: 'Note too long. Maximum 1000 characters' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE pattern_favorites SET note = $1
+       WHERE ticker = $2 AND entry_month = $3 AND holding_period = $4
+       RETURNING *`,
+      [note || null, ticker.toUpperCase(), month, holdingPeriod]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Pattern favorite not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error setting pattern note:', error);
+    res.status(500).json({ error: 'Failed to set pattern note' });
   }
 });

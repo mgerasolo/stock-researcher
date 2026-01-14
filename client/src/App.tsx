@@ -54,6 +54,7 @@ function App() {
   const [yearsToShow, setYearsToShow] = useState(12);
   const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down'>>({});
   const [patternRatings, setPatternRatings] = useState<Record<string, number>>({});
+  const [patternNotes, setPatternNotes] = useState<Record<string, string>>({});
   const [useHeatmapV2, setUseHeatmapV2] = useState(false); // Toggle between V1 and V2 heatmap
 
   // Navigate to a page and push to browser history
@@ -139,6 +140,14 @@ function App() {
     fetch('/api/pattern-favorites/ratings')
       .then(res => res.json())
       .then((ratings: Record<string, number>) => setPatternRatings(ratings))
+      .catch(() => {});
+  }, []);
+
+  // Load pattern notes from API on mount
+  useEffect(() => {
+    fetch('/api/pattern-favorites/notes')
+      .then(res => res.json())
+      .then((notes: Record<string, string>) => setPatternNotes(notes))
       .catch(() => {});
   }, []);
 
@@ -248,6 +257,35 @@ function App() {
       fetch('/api/pattern-favorites/ratings')
         .then(res => res.json())
         .then((ratings: Record<string, number>) => setPatternRatings(ratings))
+        .catch(() => {});
+    }
+  };
+
+  // Handle pattern note change - persists to database via API
+  const handleNoteChange = async (key: string, note: string | null) => {
+    // Optimistically update UI
+    setPatternNotes((prev) => {
+      const next = { ...prev };
+      if (note === null || note === '') {
+        delete next[key];
+      } else {
+        next[key] = note;
+      }
+      return next;
+    });
+
+    // Persist to API
+    try {
+      await fetch(`/api/pattern-favorites/key/${encodeURIComponent(key)}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+    } catch {
+      // Revert on error by re-fetching
+      fetch('/api/pattern-favorites/notes')
+        .then(res => res.json())
+        .then((notes: Record<string, string>) => setPatternNotes(notes))
         .catch(() => {});
     }
   };
@@ -590,6 +628,8 @@ function App() {
             }}
             ratings={patternRatings}
             onRatingChange={handleRatingChange}
+            notes={patternNotes}
+            onNoteChange={handleNoteChange}
           />
         )}
 
