@@ -30,6 +30,7 @@ interface ScreenerResult {
   marketReturn: number;
   marketPerMonth: number;
   alpha: number;
+  score?: number; // Composite score: (winRate/100) * avgPerMonth * sqrt(count)
 }
 
 interface ScreenerResponse {
@@ -92,8 +93,8 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
   const monthDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sorting
-  const [sortBy, setSortBy] = useState<keyof ScreenerResult>('avgPerMonth');
+  // Sorting - default to composite score
+  const [sortBy, setSortBy] = useState<keyof ScreenerResult>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
@@ -131,12 +132,23 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Calculate composite score: (winRate/100) * avgPerMonth * sqrt(count)
+  const calculateScore = (r: ScreenerResult): number => {
+    return (r.winRate / 100) * r.avgPerMonth * Math.sqrt(r.count);
+  };
+
   // Sort and filter results by selected months and sentiment
   const sortedResults = useMemo(() => {
     if (!data?.results) return [];
 
+    // Calculate score for each result
+    const withScores = data.results.map(r => ({
+      ...r,
+      score: calculateScore(r),
+    }));
+
     // Filter by selected months
-    let filtered = data.results.filter(r => selectedMonths.includes(r.entryMonth));
+    let filtered = withScores.filter(r => selectedMonths.includes(r.entryMonth));
 
     // Filter by sentiment
     if (sentimentFilter === 'hide-avoided') {
@@ -236,12 +248,17 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
     return 'text-red-500';
   };
 
-  const SortHeader = ({ column, label, highlight = false }: { column: keyof ScreenerResult; label: string; highlight?: boolean }) => (
+  const [scoreTooltipVisible, setScoreTooltipVisible] = useState(false);
+
+  const SortHeader = ({ column, label, highlight = false, tooltip }: { column: keyof ScreenerResult; label: string; highlight?: boolean; tooltip?: string }) => (
     <th
       onClick={() => handleSort(column)}
-      className={`px-3 py-2 text-left text-xs font-medium cursor-pointer hover:bg-gray-100 select-none ${
+      onMouseEnter={() => column === 'score' && setScoreTooltipVisible(true)}
+      onMouseLeave={() => column === 'score' && setScoreTooltipVisible(false)}
+      className={`px-3 py-2 text-left text-xs font-medium cursor-pointer hover:bg-gray-100 select-none relative ${
         highlight ? 'text-green-700 bg-green-50' : 'text-gray-700'
       }`}
+      data-sorted={sortBy === column ? sortDir : undefined}
     >
       <div className="flex items-center gap-1">
         {highlight && <span className="text-green-600">★</span>}
@@ -249,7 +266,20 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
         {sortBy === column && (
           <span className="text-blue-600">{sortDir === 'desc' ? '▼' : '▲'}</span>
         )}
+        {tooltip && (
+          <span className="text-gray-400 cursor-help" title={tooltip}>ⓘ</span>
+        )}
       </div>
+      {column === 'score' && scoreTooltipVisible && (
+        <div
+          data-testid="score-tooltip"
+          className="absolute left-0 top-full mt-1 z-50 bg-gray-900 text-white text-xs rounded-lg shadow-lg p-3 w-64 font-normal"
+        >
+          <p className="font-medium mb-1">Composite Score Formula:</p>
+          <p className="text-gray-300">Score = (win rate / 100) × average return × √(years of data)</p>
+          <p className="text-gray-400 mt-2 text-[10px]">Balances profitability, reliability, and statistical significance.</p>
+        </div>
+      )}
     </th>
   );
 
@@ -505,10 +535,11 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
             <thead className="sticky top-0 bg-gray-50 border-b z-10">
               <tr>
                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 w-8">#</th>
+                <SortHeader column="score" label="Score" highlight tooltip="Composite score balancing win rate, returns, and years of data" />
                 <SortHeader column="ticker" label="Ticker" />
                 <SortHeader column="entryMonthName" label="Entry" />
                 <SortHeader column="holdingPeriod" label="Hold" />
-                <SortHeader column="avgPerMonth" label="Avg/Mo" highlight />
+                <SortHeader column="avgPerMonth" label="Avg/Mo" />
                 <SortHeader column="avgReturn" label="Total" />
                 <SortHeader column="winRate" label="Win%" />
                 <SortHeader column="alpha" label="Alpha" />
@@ -532,6 +563,11 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                     onClick={() => onSelectTicker?.(row.ticker, row.entryMonth, row.holdingPeriod)}
                   >
                     <td className="px-3 py-2 text-xs text-gray-400">{idx + 1}</td>
+                    <td className="px-3 py-2">
+                      <span className={`font-bold text-sm ${row.score && row.score >= 5 ? 'text-green-600' : row.score && row.score >= 3 ? 'text-green-500' : row.score && row.score >= 1 ? 'text-gray-700' : 'text-gray-500'}`}>
+                        {row.score?.toFixed(1) ?? '-'}
+                      </span>
+                    </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center">
                         <span className="font-bold text-indigo-600 w-16">{row.ticker}</span>
