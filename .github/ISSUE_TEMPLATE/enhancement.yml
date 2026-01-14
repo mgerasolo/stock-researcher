@@ -1,0 +1,59 @@
+name: Enhancement
+description: Improve an existing feature
+title: "[Enhancement]: Brief description"
+labels: ["type:enhancement", "phase:0-backlog"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Enhancement Request
+        Suggest an improvement to an existing feature.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      options:
+        - UI - User interface
+        - API - Backend services
+        - Database - Data storage
+        - Auth - Authentication
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Behavior
+      description: How does this feature currently work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: improved
+    attributes:
+      label: Desired Improvement
+      description: How should it work instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Expected Benefit
+      description: Why is this improvement valuable?
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Suggested Priority
+      options:
+        - High - Significantly improves usability
+        - Medium - Nice to have
+        - Low - Minor polish
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context

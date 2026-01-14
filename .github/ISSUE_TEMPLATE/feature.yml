@@ -1,13 +1,13 @@
 name: Feature Request
-description: Propose a new feature for stock-researcher
+description: Propose a new feature
 title: "[Feature]: Brief description"
-labels: ["type:feature", "status:soon"]
+labels: ["type:feature", "phase:0-backlog"]
 body:
   - type: markdown
     attributes:
       value: |
         ## Feature Request
-        Propose a new feature or capability for stock-researcher.
+        Propose a new feature or capability.
 
   - type: dropdown
     id: area

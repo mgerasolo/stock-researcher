@@ -618,7 +618,10 @@ function App() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <StockPicker onSelect={handleSelectTicker} selected={selectedTicker} />
+                  <StockPicker onSelect={(ticker) => {
+                    handleSelectTicker(ticker);
+                    navigateTo('search', ticker);
+                  }} selected={selectedTicker} />
                   {selectedTicker && (
                     <button
                       onClick={() => setIsDrawerOpen(!isDrawerOpen)}
@@ -705,7 +708,7 @@ function App() {
                           />
                         </div>
                         <div className="flex items-center gap-1 text-sm">
-                          <span className="text-gray-400">Avg≥</span>
+                          <span className="text-gray-400">Avg/Mo≥</span>
                           <input
                             type="number"
                             value={filters.minAvgGain}
@@ -746,6 +749,8 @@ function App() {
                         filters={filters}
                         highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
                         yearsToShow={yearsToShow}
+                        favorites={favorites}
+                        onToggleFavorite={handleToggleFavorite}
                       />
                     ))}
                   </div>
@@ -810,7 +815,10 @@ function App() {
                   {/* Large Centered Search Box */}
                   <div className="w-full max-w-lg">
                     <StockPicker
-                      onSelect={handleSelectTicker}
+                      onSelect={(ticker) => {
+                        handleSelectTicker(ticker);
+                        navigateTo('search', ticker);
+                      }}
                       selected={selectedTicker}
                       size="large"
                       autoFocus

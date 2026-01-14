@@ -317,9 +317,21 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
   }, [data?.data]);
 
   // Check if a month meets filter criteria
-  const meetsFilterCriteria = (agg: MonthAggregate | undefined): boolean => {
+  // Uses trimmed average per month (same as displayed Avg/Mo row) for the average gain filter
+  const meetsFilterCriteria = (agg: MonthAggregate | undefined, month: number): boolean => {
     if (!agg || !filters) return false;
-    return agg.win_rate >= filters.minWinRate && agg.avg_return >= filters.minAvgGain;
+
+    // Check win rate
+    if (agg.win_rate < filters.minWinRate) return false;
+
+    // Check per-month average (trimmed) - same calculation as the Avg/Mo row display
+    const trimmedReturn = trimmedAvgByMonth.get(month);
+    if (trimmedReturn === undefined) return false;
+
+    const actualHoldingMonths = calcMethod === 'openClose' ? holdingPeriod + 1 : holdingPeriod;
+    const avgPerMonth = trimmedReturn / actualHoldingMonths;
+
+    return avgPerMonth >= filters.minAvgGain;
   };
 
   // Get highlighted months (from filter criteria)
@@ -327,16 +339,17 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
     if (!data?.aggregates || !filters) return new Set<number>();
     return new Set(
       data.aggregates
-        .filter(agg => meetsFilterCriteria(agg))
+        .filter(agg => meetsFilterCriteria(agg, agg.month))
         .map(agg => agg.month)
     );
-  }, [data?.aggregates, filters]);
+  }, [data?.aggregates, filters, trimmedAvgByMonth, calcMethod, holdingPeriod]);
 
   // Check if this month should have report highlight (yellow)
   const isReportHighlight = (month: number) => highlightMonth === month;
 
-  // Check if filter mode is active (filters set AND at least one match)
-  const isFilterActive = filters && highlightedMonths.size > 0;
+  // Check if filter mode is active (filters are set, regardless of matches)
+  // This ensures columns are dimmed even when nothing matches the criteria
+  const isFilterActive = !!filters;
 
   // Helper to determine if a column should be dimmed (doesn't match filter criteria)
   const shouldDimColumn = (month: number) => {
@@ -385,8 +398,13 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
             {calcMethod === 'maxMax' ? 'Max→Max' : 'Open→Close'}
           </span>
           {highlightedMonths.size > 0 && (
-            <span className="text-blue-600 font-medium text-sm">
+            <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs font-medium">
               {highlightedMonths.size} match{highlightedMonths.size > 1 ? 'es' : ''}
+            </span>
+          )}
+          {highlightMonth && (
+            <span className="px-2 py-0.5 bg-yellow-400 text-yellow-900 rounded text-xs font-medium">
+              📍 {MONTHS[highlightMonth - 1]}
             </span>
           )}
         </div>
@@ -420,24 +438,6 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
 
         {!isLoading && !error && data && (
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            {/* Match Info Bar - only show when expanded */}
-            {isExpanded && (highlightedMonths.size > 0 || highlightMonth) && (
-              <div className="bg-gradient-to-r from-slate-100 to-slate-50 border-b border-slate-200 px-4 py-2">
-                <div className="flex items-center justify-end gap-3 text-sm">
-                  {highlightedMonths.size > 0 && (
-                    <span className="px-2 py-1 bg-blue-600 text-white rounded font-medium">
-                      {highlightedMonths.size} month{highlightedMonths.size > 1 ? 's' : ''} match
-                    </span>
-                  )}
-                  {highlightMonth && (
-                    <span className="px-2 py-1 bg-yellow-400 text-yellow-900 rounded font-medium text-xs">
-                      📍 {MONTHS[highlightMonth - 1]} from report
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
             <div className="overflow-x-auto">
               <table className="w-full table-fixed text-xs">
                   <colgroup>
@@ -852,16 +852,18 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                                     }}
                                     className={`h-6 flex items-center justify-center text-[10px] font-medium cursor-pointer rounded-sm relative ${
                                       isFromReport ? 'ring-1 ring-yellow-500' : ''
-                                    } ${blackSwanEvent ? 'ring-1 ring-purple-500' : ''} ${getCellColor(cell.return_pct, holdingPeriod, calcMethod)}`}
+                                    } ${blackSwanEvent ? 'ring-1 ring-gray-600' : ''} ${getCellColor(cell.return_pct, holdingPeriod, calcMethod)}`}
                                   >
                                     {cell.return_pct !== null
                                       ? `${cell.return_pct.toFixed(1)}%`
                                       : '-'}
                                     {blackSwanEvent && (
                                       <span
-                                        className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-purple-600 rounded-full cursor-help"
-                                        title={blackSwanEvent.events.map(e => e.title).join(', ')}
+                                        className="absolute -top-1 -right-1 w-3 h-3 bg-gray-900 rounded-full cursor-help flex items-center justify-center text-[6px] leading-none border border-gray-600"
                                         onMouseEnter={(e) => {
+                                          e.stopPropagation();
+                                          // Hide the cell tooltip when showing black swan tooltip
+                                          setTooltip(null);
                                           const rect = containerRef.current?.getBoundingClientRect();
                                           if (rect) {
                                             setBlackSwanTooltip({
@@ -871,8 +873,14 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                                             });
                                           }
                                         }}
-                                        onMouseLeave={() => setBlackSwanTooltip(null)}
-                                      />
+                                        onMouseLeave={(e) => {
+                                          e.stopPropagation();
+                                          setBlackSwanTooltip(null);
+                                        }}
+                                        onMouseMove={(e) => e.stopPropagation()}
+                                      >
+                                        <span className="text-white">S</span>
+                                      </span>
                                     )}
                                   </div>
                                 ) : (
@@ -909,8 +917,8 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
               {isExpanded && blackSwanMonths.length > 0 && (
                 <div className="flex items-center justify-end gap-4 px-4 py-2 bg-gray-50 border-t border-gray-200 text-[10px] text-gray-500">
                   <div className="flex items-center gap-1">
-                    <span className="w-2 h-2 bg-purple-600 rounded-full"></span>
-                    <span>Black Swan Period</span>
+                    <span className="w-3 h-3 bg-gray-900 rounded-full flex items-center justify-center text-[6px] text-white border border-gray-600">S</span>
+                    <span>Market Drawdown</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <span>!!</span>
@@ -1007,32 +1015,32 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
         </div>
       )}
 
-      {/* Black Swan Event Tooltip */}
+      {/* Market Drawdown Tooltip */}
       {blackSwanTooltip && (
         <div
-          className="absolute z-50 bg-purple-900 text-white text-xs rounded-lg shadow-lg p-3 pointer-events-none"
+          className="absolute z-50 bg-gray-800 text-white text-xs rounded-lg shadow-lg p-3 pointer-events-none border border-gray-600"
           style={{
             left: Math.min(blackSwanTooltip.x, (containerRef.current?.clientWidth || 500) - 280),
             top: blackSwanTooltip.y,
             maxWidth: '280px',
           }}
         >
-          <div className="font-bold mb-1 flex items-center gap-1">
-            <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
-            Black Swan Period
+          <div className="font-bold mb-1 flex items-center gap-1.5">
+            <span className="w-3 h-3 bg-gray-900 rounded-full flex items-center justify-center text-[6px] border border-gray-500">S</span>
+            Market Drawdown
           </div>
-          <div className="text-purple-100">
+          <div className="text-gray-200">
             {blackSwanTooltip.event.events.map((evt, idx) => (
               <div key={idx} className="mb-1">
                 <p className="font-medium text-white">{evt.title}</p>
                 {evt.impact && (
-                  <p className="text-purple-200 text-[11px]">
+                  <p className="text-gray-300 text-[11px]">
                     SPY Impact: {evt.impact.toFixed(1)}%
                   </p>
                 )}
               </div>
             ))}
-            <p className="text-purple-300 text-[10px] mt-1 border-t border-purple-700 pt-1">
+            <p className="text-gray-400 text-[10px] mt-1 border-t border-gray-600 pt-1">
               Returns during market-wide declines may not reflect normal seasonality patterns
             </p>
           </div>

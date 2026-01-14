@@ -1,13 +1,13 @@
 name: Bug Report
-description: Report a problem with stock-researcher
+description: Report a problem with this project
 title: "[Bug]: Brief description"
-labels: ["type:bug", "status:soon"]
+labels: ["type:bug", "phase:0-backlog"]
 body:
   - type: markdown
     attributes:
       value: |
         ## Bug Report
-        Use this template to report issues with stock-researcher.
+        Use this template to report issues.
 
   - type: dropdown
     id: severity

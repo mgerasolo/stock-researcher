@@ -1,0 +1,54 @@
+{
+  "name": "stock-researcher",
+  "version": "1.0.0",
+  "description": "Stock seasonality analysis and heatmap visualization tool",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client && npm run build -w server",
+    "build:server": "npm run build -w server",
+    "build:client": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker compose build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mgerasolo/stock-researcher.git"
+  },
+  "keywords": [
+    "stock",
+    "seasonality",
+    "heatmap",
+    "trading",
+    "analysis"
+  ],
+  "author": "Matt Gerasolo",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mgerasolo/stock-researcher/issues"
+  },
+  "homepage": "https://github.com/mgerasolo/stock-researcher#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.6",
+    "bmad-mcp": "^0.1.0",
+    "bmad-mcp-server": "^3.0.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.39.2",
+    "prettier": "^3.7.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}

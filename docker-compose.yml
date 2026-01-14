@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: stock-researcher-db
+    restart: unless-stopped
+    mem_limit: 1g
+    memswap_limit: 2g
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-localdev}
+      POSTGRES_DB: stock_researcher
+      TZ: America/New_York
+    ports:
+      - "10.0.0.33:3380:5432"
+    volumes:
+      - stock-researcher_db_data:/var/lib/postgresql/data
+      - ./data-pipeline/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: stock-researcher-server
+    restart: unless-stopped
+    mem_limit: 1g
+    memswap_limit: 2g
+    environment:
+      NODE_ENV: production
+      PORT: 3157
+      DB_HOST: 10.0.0.33
+      DB_PORT: 3380
+      DB_NAME: stock_researcher
+      DB_USER: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-localdev}
+      CORS_ORIGIN: https://stock-researcher.nextlevelfoundry.com
+      TZ: America/New_York
+    ports:
+      - "10.0.0.33:3381:3157"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: stock-researcher-client
+    restart: unless-stopped
+    mem_limit: 512m
+    memswap_limit: 1g
+    ports:
+      - "10.0.0.33:3382:80"
+    environment:
+      TZ: America/New_York
+    depends_on:
+      - server
+
+volumes:
+  stock-researcher_db_data:

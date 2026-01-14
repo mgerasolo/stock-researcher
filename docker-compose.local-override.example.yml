@@ -1,0 +1,36 @@
+# Local Development Overrides - EXAMPLE FILE
+#
+# To use for local development:
+#   1. Copy this file to docker-compose.override.yml
+#   2. Run: docker-compose up
+#
+# WARNING: Do NOT commit docker-compose.override.yml to git!
+# The override file auto-merges with docker-compose.yml and would break
+# production deployments by binding to localhost instead of Banner.
+#
+# For production on Banner, ALWAYS use:
+#   docker-compose -f docker-compose.yml up -d
+
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  server:
+    environment:
+      NODE_ENV: development
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "127.0.0.1:3157:3157"
+    volumes:
+      - ./server/src:/app/src:ro
+    command: npm run dev
+
+  client:
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./client/src:/app/src:ro
+    environment:
+      - VITE_API_URL=http://localhost:3157
+    command: npm run dev -- --host

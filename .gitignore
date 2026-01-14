@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+ENV/
+.venv/
+
+# Data files (keep structure, ignore large data)
+data-pipeline/*.csv
+!data-pipeline/schema.sql
+
+# Docker
+.docker/
+# IMPORTANT: Override file would break production by binding to localhost
+docker-compose.override.yml
+
+# Coverage
+coverage/
+.nyc_output/
+
+# IDE - additional
+.cursor/
+.claude/conversations/
+.claude/worktrees/
+
+# Local config
+.mcp.json
+
+# BMAD build outputs
+_bmad/
+_bmad-output/
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# External symlinks (project-specific)
+AppServices
+Standards
+
+# Imports (data dumps)
+imports/

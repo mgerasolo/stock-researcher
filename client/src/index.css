@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #213547;
+  background-color: #ffffff;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Heatmap cell hover effect */
+.heatmap-cell {
+  @apply transition-all duration-150 cursor-pointer;
+}
+
+.heatmap-cell:hover {
+  @apply ring-2 ring-blue-500 ring-offset-1 z-10;
+}
