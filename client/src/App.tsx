@@ -293,7 +293,7 @@ function App() {
 
         {/* Navigation */}
         <nav className="p-2 space-y-1">
-          {/* Favorites - Top Level */}
+          {/* Favorite Patterns - Top Level */}
           <a
             href="#favorites"
             onClick={(e) => {
@@ -307,7 +307,7 @@ function App() {
             }`}
           >
             <span className="text-lg">❤️</span>
-            <span>Favorites</span>
+            <span>Favorite Patterns</span>
             {favorites.size > 0 && (
               <span className="ml-auto bg-pink-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
                 {favorites.size}
@@ -742,7 +742,7 @@ function App() {
                         viewMode={viewMode}
                         holdingPeriod={timeframe}
                         calcMethod={calcMethod}
-                        defaultExpanded={index === 1 || (highlightCell?.holdingPeriod === timeframe)} // 3-month expanded by default, or if highlighted
+                        defaultExpanded={highlightCell ? highlightCell.holdingPeriod === timeframe : index === 1} // When drilling down: only expand matching table; otherwise: 3-month by default
                         filters={filters}
                         highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
                         yearsToShow={yearsToShow}
