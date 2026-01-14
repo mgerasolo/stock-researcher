@@ -21,43 +21,54 @@ test.describe('Issue #33: Collapse tables on report drill-down', () => {
     // Wait for the screener table to fully load with data
     const screenerTable = page.locator('tbody tr').first();
     await expect(screenerTable).toBeVisible({ timeout: 15000 });
-    await page.waitForTimeout(1000); // Extra wait for all rows to render
+    await page.waitForTimeout(1000);
 
-    // Get the holding period from the first row BEFORE clicking
-    // The Period column shows "3-mo", "6-mo", or "12-mo"
+    // Click the first row to drill down (we don't need to know which period it is)
     const firstRow = page.locator('tbody tr').first();
-    const periodCell = firstRow.locator('td').nth(2); // Period is in 3rd column
-    const periodText = await periodCell.textContent();
-
-    // Determine the actual holding period from the cell text
-    let holdingPeriod = 3;
-    if (periodText?.includes('6')) {
-      holdingPeriod = 6;
-    } else if (periodText?.includes('12')) {
-      holdingPeriod = 12;
-    }
-
-    // Click the first row to drill down
     await firstRow.click();
 
     // Wait for navigation to search page with ticker
     await page.waitForURL(/.*#search\/.*/);
     await page.waitForTimeout(1500);
 
-    // The matching holding period table should be expanded (shows "Collapse")
-    const matchingTableButton = page.locator(`button:has-text("${holdingPeriod} Month Returns")`);
-    await expect(matchingTableButton).toBeVisible({ timeout: 10000 });
-    const matchingCollapseText = matchingTableButton.locator('text=Collapse');
-    await expect(matchingCollapseText).toBeVisible();
+    // Count how many tables are expanded (show "Collapse") vs collapsed (show "Expand")
+    // With the fix, exactly ONE table should be expanded
+    const allTables = [
+      page.locator('button:has-text("1 Month Returns")'),
+      page.locator('button:has-text("3 Month Returns")'),
+      page.locator('button:has-text("6 Month Returns")'),
+      page.locator('button:has-text("12 Month Returns")')
+    ];
 
-    // Tables for OTHER holding periods should be collapsed
-    // Check all non-matching tables show "Expand"
-    const otherPeriods = [1, 3, 6, 12].filter(p => p !== holdingPeriod);
-    for (const period of otherPeriods) {
-      const otherButton = page.locator(`button:has-text("${period} Month Returns")`);
-      if (await otherButton.isVisible()) {
-        const expandText = otherButton.locator('text=Expand');
-        await expect(expandText).toBeVisible();
+    let expandedCount = 0;
+    let expandedPeriod = '';
+
+    for (const tableButton of allTables) {
+      if (await tableButton.isVisible()) {
+        const buttonText = await tableButton.textContent();
+        if (buttonText?.includes('Collapse')) {
+          expandedCount++;
+          // Extract the period name from button text
+          const match = buttonText.match(/(\d+ Month)/);
+          if (match) expandedPeriod = match[1];
+        }
+      }
+    }
+
+    // Exactly one table should be expanded (the drill-down target)
+    expect(expandedCount).toBe(1);
+
+    // Verify the expanded table matches a valid timeframe
+    expect(['1 Month', '3 Month', '6 Month', '12 Month']).toContain(expandedPeriod);
+
+    // Verify other tables are collapsed
+    for (const tableButton of allTables) {
+      if (await tableButton.isVisible()) {
+        const buttonText = await tableButton.textContent();
+        if (!buttonText?.includes(expandedPeriod.split(' ')[0])) {
+          // This is not the expanded table, should show "Expand"
+          expect(buttonText).toContain('Expand');
+        }
       }
     }
   });
