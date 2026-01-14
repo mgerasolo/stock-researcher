@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import type { ViewMode, Timeframe, FilterCriteria, CalculationMethod } from '../App';
+import { ScatterPlot } from './ScatterPlot';
 
 interface BlackSwanMonth {
   year: number;
@@ -437,7 +438,16 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
         )}
 
         {!isLoading && !error && data && (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div data-testid="heatmap-container">
+            {/* Scatter Plot above the heatmap */}
+            {isExpanded && (
+              <ScatterPlot
+                data={data.data}
+                ticker={ticker}
+              />
+            )}
+
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full table-fixed text-xs">
                   <colgroup>
@@ -931,6 +941,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
                 </div>
               )}
             </div>
+          </div>
           )}
         </div>
 
