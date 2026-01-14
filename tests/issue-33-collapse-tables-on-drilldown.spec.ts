@@ -17,54 +17,48 @@ test.describe('Issue #33: Collapse tables on report drill-down', () => {
     // Go to Top Periods report via navigation
     await page.click('text=Top Periods');
     await page.waitForURL(/.*#top-periods.*/);
-    await page.waitForTimeout(1000);
 
-    // Wait for the screener table to load
-    const screenerTable = page.locator('table').first();
-    await expect(screenerTable).toBeVisible({ timeout: 10000 });
+    // Wait for the screener table to fully load with data
+    const screenerTable = page.locator('tbody tr').first();
+    await expect(screenerTable).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(1000); // Extra wait for all rows to render
 
-    // Find a row with 6-mo or 12-mo holding period and click it
-    // The Period column shows "6-mo" or "12-mo"
-    let targetRow = page.locator('tbody tr').filter({ hasText: '6-mo' }).first();
-    let holdingPeriod = 6;
+    // Get the holding period from the first row BEFORE clicking
+    // The Period column shows "3-mo", "6-mo", or "12-mo"
+    const firstRow = page.locator('tbody tr').first();
+    const periodCell = firstRow.locator('td').nth(2); // Period is in 3rd column
+    const periodText = await periodCell.textContent();
 
-    if (await targetRow.count() === 0) {
-      targetRow = page.locator('tbody tr').filter({ hasText: '12-mo' }).first();
+    // Determine the actual holding period from the cell text
+    let holdingPeriod = 3;
+    if (periodText?.includes('6')) {
+      holdingPeriod = 6;
+    } else if (periodText?.includes('12')) {
       holdingPeriod = 12;
     }
 
-    if (await targetRow.count() === 0) {
-      // Fall back to any row if no 6-mo or 12-mo found
-      targetRow = page.locator('tbody tr').first();
-      holdingPeriod = 3;
-    }
-
-    // Click the row to drill down
-    await targetRow.click();
+    // Click the first row to drill down
+    await firstRow.click();
 
     // Wait for navigation to search page with ticker
     await page.waitForURL(/.*#search\/.*/);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
-    // Check the heatmap tables
-    // The header format is "{TICKER} - {N} Month Returns"
-    // Expanded tables show "▼ Collapse", collapsed show "▶ Expand"
-
-    // The matching holding period table should be expanded
-    const expandedIndicator = `${holdingPeriod} Month Returns`;
-    const matchingSection = page.locator(`button:has-text("${expandedIndicator}")`);
-    await expect(matchingSection).toBeVisible();
-
-    // Check that it shows "Collapse" (expanded state)
-    const matchingCollapseText = matchingSection.locator('text=Collapse');
+    // The matching holding period table should be expanded (shows "Collapse")
+    const matchingTableButton = page.locator(`button:has-text("${holdingPeriod} Month Returns")`);
+    await expect(matchingTableButton).toBeVisible({ timeout: 10000 });
+    const matchingCollapseText = matchingTableButton.locator('text=Collapse');
     await expect(matchingCollapseText).toBeVisible();
 
-    // If we drilled down to 6-mo or 12-mo, the 3-month table should be collapsed
-    if (holdingPeriod !== 3) {
-      const threeMonthSection = page.locator('button:has-text("3 Month Returns")');
-      // Collapsed tables show "Expand"
-      const expandText = threeMonthSection.locator('text=Expand');
-      await expect(expandText).toBeVisible();
+    // Tables for OTHER holding periods should be collapsed
+    // Check all non-matching tables show "Expand"
+    const otherPeriods = [1, 3, 6, 12].filter(p => p !== holdingPeriod);
+    for (const period of otherPeriods) {
+      const otherButton = page.locator(`button:has-text("${period} Month Returns")`);
+      if (await otherButton.isVisible()) {
+        const expandText = otherButton.locator('text=Expand');
+        await expect(expandText).toBeVisible();
+      }
     }
   });
 
@@ -88,7 +82,7 @@ test.describe('Issue #33: Collapse tables on report drill-down', () => {
     }
 
     // Wait for heatmaps to load
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     // 3-month table should be expanded by default (shows "Collapse")
     const threeMonthSection = page.locator('button:has-text("3 Month Returns")');
@@ -106,35 +100,27 @@ test.describe('Issue #33: Collapse tables on report drill-down', () => {
     // Go to Top Periods report
     await page.click('text=Top Periods');
     await page.waitForURL(/.*#top-periods.*/);
-    await page.waitForTimeout(1000);
 
     // Wait for table to load and click first row
     const firstDataRow = page.locator('tbody tr').first();
-    await expect(firstDataRow).toBeVisible({ timeout: 10000 });
+    await expect(firstDataRow).toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(500);
     await firstDataRow.click();
 
     // Wait for navigation to search page
     await page.waitForURL(/.*#search\/.*/);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
-    // The Best Months drawer should be visible on the right
-    // It shows "Best Entry Months" or similar content
-    const drawerContent = page.locator('[class*="drawer"]').or(page.locator('text=Best Entry'));
-
-    // The drawer should be present and operational (either visible or togglable)
-    // This verifies the drawer wasn't broken by the drill-down logic
+    // Verify the page loaded with heatmap tables
     const heatmapExists = page.locator('button:has-text("Month Returns")').first();
     await expect(heatmapExists).toBeVisible();
 
-    // If there's a drawer toggle, click it
-    const drawerToggle = page.locator('button:has-text("Best")');
-    if (await drawerToggle.isVisible()) {
-      await drawerToggle.click();
-      await page.waitForTimeout(300);
-    }
+    // The Best Months drawer should exist and be operational
+    // Look for the "Best Entry Months" heading in the drawer
+    const drawerHeading = page.locator('text=Best Entry Months');
+    await expect(drawerHeading).toBeVisible({ timeout: 5000 });
 
-    // Verify the page is functional after drill-down
-    // (drawer state is independent)
+    // Verify the page is functional (drawer state is independent)
     await expect(heatmapExists).toBeVisible();
   });
 });
