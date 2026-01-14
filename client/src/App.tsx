@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { StockPicker } from './components/StockPicker';
 import { Heatmap } from './components/Heatmap';
+import { HeatmapV2 } from './components/HeatmapV2';
 import { MaxCloseGrid } from './components/MaxCloseGrid';
 import { BestMonthsDrawer } from './components/BestMonthsDrawer';
 import { ScreenerPage } from './components/ScreenerPage';
@@ -53,6 +54,7 @@ function App() {
   const [yearsToShow, setYearsToShow] = useState(12);
   const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down'>>({});
   const [patternRatings, setPatternRatings] = useState<Record<string, number>>({});
+  const [useHeatmapV2, setUseHeatmapV2] = useState(false); // Toggle between V1 and V2 heatmap
 
   // Navigate to a page and push to browser history
   const navigateTo = (page: Page, ticker?: string | null, highlight?: { entryMonth: number; holdingPeriod: number } | null) => {
@@ -726,6 +728,23 @@ function App() {
                         <span className="w-3 h-3 rounded-sm bg-purple-100 border border-purple-400"></span>
                         <span>matches</span>
                       </div>
+
+                      <div className="w-px h-5 bg-gray-300" />
+
+                      {/* V1/V2 Toggle */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Layout</span>
+                        <button
+                          onClick={() => setUseHeatmapV2(!useHeatmapV2)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                            useHeatmapV2
+                              ? 'bg-teal-600 text-white'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          {useHeatmapV2 ? 'V2 (Split Cell)' : 'V1 (Classic)'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -738,21 +757,24 @@ function App() {
 
                   {/* All Timeframes */}
                   <div className="space-y-3">
-                    {TIMEFRAMES.map((timeframe, index) => (
-                      <Heatmap
-                        key={`${timeframe}-${calcMethod}-${yearsToShow}`}
-                        ticker={selectedTicker}
-                        viewMode={viewMode}
-                        holdingPeriod={timeframe}
-                        calcMethod={calcMethod}
-                        defaultExpanded={highlightCell ? highlightCell.holdingPeriod === timeframe : index === 1} // When drilling down: only expand matching table; otherwise: 3-month by default
-                        filters={filters}
-                        highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
-                        yearsToShow={yearsToShow}
-                        favorites={favorites}
-                        onToggleFavorite={handleToggleFavorite}
-                      />
-                    ))}
+                    {TIMEFRAMES.map((timeframe, index) => {
+                      const HeatmapComponent = useHeatmapV2 ? HeatmapV2 : Heatmap;
+                      return (
+                        <HeatmapComponent
+                          key={`${timeframe}-${calcMethod}-${yearsToShow}-${useHeatmapV2 ? 'v2' : 'v1'}`}
+                          ticker={selectedTicker}
+                          viewMode={viewMode}
+                          holdingPeriod={timeframe}
+                          calcMethod={calcMethod}
+                          defaultExpanded={highlightCell ? highlightCell.holdingPeriod === timeframe : index === 1}
+                          filters={filters}
+                          highlightMonth={highlightCell?.holdingPeriod === timeframe ? highlightCell.entryMonth : undefined}
+                          yearsToShow={yearsToShow}
+                          favorites={favorites}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      );
+                    })}
                   </div>
 
                   {/* Max Close Price Grid - Separate Section */}
