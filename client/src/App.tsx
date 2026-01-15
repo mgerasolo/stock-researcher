@@ -52,7 +52,7 @@ function App() {
   const [lastDataSync, setLastDataSync] = useState<string | null>(null);
   const [highlightCell, setHighlightCell] = useState<{ entryMonth: number; holdingPeriod: number } | null>(null);
   const [yearsToShow, setYearsToShow] = useState(12);
-  const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down'>>({});
+  const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down' | 'investigate'>>({});
   const [tickerNotes, setTickerNotes] = useState<Record<string, string>>({});
   const [patternRatings, setPatternRatings] = useState<Record<string, number>>({});
   const [patternNotes, setPatternNotes] = useState<Record<string, string>>({});
@@ -156,8 +156,8 @@ function App() {
   useEffect(() => {
     fetch('/api/ticker-sentiment/detailed')
       .then(res => res.json())
-      .then((data: Array<{ ticker: string; sentiment: 'up' | 'down'; note: string | null }>) => {
-        const sentiments: Record<string, 'up' | 'down'> = {};
+      .then((data: Array<{ ticker: string; sentiment: 'up' | 'down' | 'investigate'; note: string | null }>) => {
+        const sentiments: Record<string, 'up' | 'down' | 'investigate'> = {};
         const notes: Record<string, string> = {};
         data.forEach(item => {
           sentiments[item.ticker] = item.sentiment;
@@ -333,8 +333,8 @@ function App() {
       // Revert on error by re-fetching
       fetch('/api/ticker-sentiment/detailed')
         .then(res => res.json())
-        .then((data: Array<{ ticker: string; sentiment: 'up' | 'down'; note: string | null }>) => {
-          const sentiments: Record<string, 'up' | 'down'> = {};
+        .then((data: Array<{ ticker: string; sentiment: 'up' | 'down' | 'investigate'; note: string | null }>) => {
+          const sentiments: Record<string, 'up' | 'down' | 'investigate'> = {};
           const notes: Record<string, string> = {};
           data.forEach(item => {
             sentiments[item.ticker] = item.sentiment;

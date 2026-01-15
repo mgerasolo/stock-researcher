@@ -22,6 +22,7 @@ interface ScatterPlotProps {
   selectedMonth?: number | null;
   onMonthSelect?: (month: number) => void;
   ticker?: string;
+  filteredMonths?: Set<number>; // Months that DON'T meet filter criteria (should be dimmed)
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -47,6 +48,7 @@ interface BarDataPoint {
   month: number;
   return_pct: number;
   isOutlier: boolean;
+  isFiltered: boolean; // Month doesn't meet filter criteria
   x: number;
 }
 
@@ -76,7 +78,7 @@ const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Toolti
   return null;
 };
 
-export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: ScatterPlotProps) {
+export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker, filteredMonths }: ScatterPlotProps) {
   const [hoveredMonth, setHoveredMonth] = useState<number | null>(null);
 
   const displayMonth = selectedMonth ?? hoveredMonth;
@@ -108,6 +110,7 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
         month: d.month,
         return_pct: d.return_pct,
         isOutlier: d.return_pct < bounds.lower || d.return_pct > bounds.upper,
+        isFiltered: filteredMonths?.has(d.month) ?? false,
         x: d.month + xOffset,
       };
     });
@@ -123,7 +126,7 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
       avgReturn: avg,
       years: uniqueYears,
     };
-  }, [data, displayMonth]);
+  }, [data, displayMonth, filteredMonths]);
 
   if (barData.length === 0) {
     return null;
@@ -170,24 +173,30 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
 
       {/* Main content: Sidebar + Chart */}
       <div className="flex">
-        {/* Left sidebar: Month toggles (vertical) */}
-        <div className="w-10 flex flex-col gap-0.5 pr-2">
-          {MONTHS.map((month, idx) => (
-            <button
-              key={month}
-              data-testid={`month-header-${month}`}
-              onClick={() => onMonthSelect?.(idx + 1)}
-              onMouseEnter={() => setHoveredMonth(idx + 1)}
-              onMouseLeave={() => setHoveredMonth(null)}
-              className={`px-1 py-0.5 text-[10px] rounded transition-colors leading-tight ${
-                displayMonth === idx + 1
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-              }`}
-            >
-              {month}
-            </button>
-          ))}
+        {/* Left sidebar: Month toggles (vertical) - matches table's first column width */}
+        <div className="w-[52px] flex flex-col gap-0.5 pr-2">
+          {MONTHS.map((month, idx) => {
+            const monthNum = idx + 1;
+            const isFiltered = filteredMonths?.has(monthNum) ?? false;
+            return (
+              <button
+                key={month}
+                data-testid={`month-header-${month}`}
+                onClick={() => onMonthSelect?.(monthNum)}
+                onMouseEnter={() => setHoveredMonth(monthNum)}
+                onMouseLeave={() => setHoveredMonth(null)}
+                className={`px-1 py-0.5 text-[10px] rounded transition-colors leading-tight ${
+                  displayMonth === monthNum
+                    ? 'bg-purple-600 text-white'
+                    : isFiltered
+                      ? 'bg-slate-800/50 text-slate-600 hover:bg-slate-700/50'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                {month}
+              </button>
+            );
+          })}
           {displayMonth && (
             <button
               onClick={() => {
@@ -248,6 +257,7 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
                     data-testid={entry.isOutlier ? 'outlier-point' : 'data-point'}
                     data-outlier={entry.isOutlier ? 'true' : 'false'}
                     data-positive={entry.return_pct >= 0 ? 'true' : 'false'}
+                    data-filtered={entry.isFiltered ? 'true' : 'false'}
                     fill={
                       entry.isOutlier
                         ? '#F59E0B'
@@ -255,6 +265,7 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
                         ? '#10B981'
                         : '#EF4444'
                     }
+                    fillOpacity={entry.isFiltered ? 0.25 : 1}
                   />
                 ))}
               </Bar>

@@ -5,7 +5,7 @@ export const tickerSentimentRouter = Router();
 
 interface TickerSentiment {
   ticker: string;
-  sentiment: 'up' | 'down';
+  sentiment: 'up' | 'down' | 'investigate';
   note: string | null;
   updated_at: Date;
   created_at: Date;
@@ -13,7 +13,7 @@ interface TickerSentiment {
 
 interface TickerSentimentDetail {
   ticker: string;
-  sentiment: 'up' | 'down';
+  sentiment: 'up' | 'down' | 'investigate';
   name: string | null;
   note: string | null;
   created_at: string;
@@ -27,7 +27,7 @@ tickerSentimentRouter.get('/', async (_req, res) => {
       `SELECT ticker, sentiment, updated_at FROM ticker_sentiment ORDER BY ticker`
     );
     // Return as a map for easier client-side lookup
-    const sentimentMap: Record<string, 'up' | 'down'> = {};
+    const sentimentMap: Record<string, 'up' | 'down' | 'investigate'> = {};
     sentiments.forEach((s) => {
       sentimentMap[s.ticker] = s.sentiment;
     });
@@ -65,8 +65,8 @@ tickerSentimentRouter.put('/:ticker', async (req, res) => {
   const ticker = req.params.ticker.toUpperCase();
   const { sentiment } = req.body;
 
-  if (!sentiment || !['up', 'down'].includes(sentiment)) {
-    return res.status(400).json({ error: 'Invalid sentiment. Must be "up" or "down"' });
+  if (!sentiment || !['up', 'down', 'investigate'].includes(sentiment)) {
+    return res.status(400).json({ error: 'Invalid sentiment. Must be "up", "down", or "investigate"' });
   }
 
   try {

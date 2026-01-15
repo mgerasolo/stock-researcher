@@ -48,13 +48,13 @@ interface ScreenerResponse {
 }
 
 export type SentimentFilter = 'hide-avoided' | 'all' | 'favorites-only';
-export type TickerSentiment = 'up' | 'down' | null;
+export type TickerSentiment = 'up' | 'down' | 'investigate' | null;
 
 interface ScreenerPageProps {
   calcMethod: CalculationMethod;
   onSelectTicker?: (ticker: string, entryMonth: number, holdingPeriod: number) => void;
   upcomingOnly?: boolean;
-  tickerSentiments?: Record<string, 'up' | 'down'>;
+  tickerSentiments?: Record<string, 'up' | 'down' | 'investigate'>;
   onSentimentChange?: (ticker: string, sentiment: TickerSentiment) => void;
   favorites?: Set<string>;
   onToggleFavorite?: (key: string) => void;
@@ -229,15 +229,6 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
     if (alpha >= -0.5) return 'text-red-400';
     if (alpha >= -1) return 'text-red-500';
     return 'text-red-600 font-bold';
-  };
-
-  const getAvgPerMonthColor = (avgPerMonth: number): string => {
-    if (avgPerMonth >= 3) return 'bg-green-500 text-white';
-    if (avgPerMonth >= 2) return 'bg-green-400 text-white';
-    if (avgPerMonth >= 1) return 'bg-green-300 text-gray-800';
-    if (avgPerMonth >= 0.5) return 'bg-green-200 text-gray-800';
-    if (avgPerMonth >= 0) return 'bg-gray-200 text-gray-700';
-    return 'bg-red-200 text-gray-800';
   };
 
   const getWinRateColor = (winRate: number): string => {
@@ -539,10 +530,10 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                 <SortHeader column="ticker" label="Ticker" />
                 <SortHeader column="entryMonthName" label="Entry" />
                 <SortHeader column="holdingPeriod" label="Hold" />
+                <SortHeader column="alpha" label="Alpha" highlight />
                 <SortHeader column="avgPerMonth" label="Avg/Mo" />
                 <SortHeader column="avgReturn" label="Total" />
                 <SortHeader column="winRate" label="Win%" />
-                <SortHeader column="alpha" label="Alpha" />
                 <SortHeader column="marketPerMonth" label="Mkt/Mo" />
                 <SortHeader column="count" label="Yrs" />
                 <SortHeader column="minReturn" label="Min" />
@@ -574,6 +565,7 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                         {/* Sentiment indicator - fixed width */}
                         <span className="w-5 text-center">
                           {currentSentiment === 'up' && <span className="text-green-500 text-xs">👍</span>}
+                          {currentSentiment === 'investigate' && <span className="text-amber-500 text-xs font-bold">?</span>}
                           {currentSentiment === 'down' && <span className="text-red-500 text-xs">👎</span>}
                         </span>
                         {/* Action buttons - fixed width container, opacity transition */}
@@ -599,6 +591,20 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  onSentimentChange(row.ticker, currentSentiment === 'investigate' ? null : 'investigate');
+                                }}
+                                className={`p-1 rounded transition-colors ${
+                                  currentSentiment === 'investigate'
+                                    ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                                    : 'text-gray-400 hover:bg-amber-50 hover:text-amber-500'
+                                }`}
+                                title={currentSentiment === 'investigate' ? 'Remove investigate' : 'Investigate this ticker'}
+                              >
+                                <span className="w-4 h-4 flex items-center justify-center font-bold text-sm">?</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   onSentimentChange(row.ticker, currentSentiment === 'down' ? null : 'down');
                                 }}
                                 className={`p-1 rounded transition-colors ${
@@ -614,50 +620,54 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                               </button>
                             </>
                           )}
-                          {onToggleFavorite && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleFavorite(favoriteKey);
-                              }}
-                              className={`p-1 rounded transition-colors ${
-                                isFavorited
-                                  ? 'text-pink-500 hover:text-pink-600'
-                                  : 'text-gray-400 hover:text-pink-500'
-                              }`}
-                              title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                            >
-                              <svg className="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                              </svg>
-                            </button>
-                          )}
                         </div>
-                        {/* Always show heart if favorited, even when not hovering */}
-                        {isFavorited && (
-                          <span className="text-pink-500 group-hover:hidden">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                            </svg>
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-sm">{row.entryMonthName}</td>
                     <td className="px-3 py-2 text-sm text-gray-600">{row.holdingPeriod}mo</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-block px-3 py-1 rounded-lg text-base font-bold shadow-sm ${getAvgPerMonthColor(row.avgPerMonth)}`}>
-                        {row.avgPerMonth > 0 ? '+' : ''}{row.avgPerMonth.toFixed(2)}%
-                      </span>
+                    {/* Alpha cell with heart button - primary metric */}
+                    <td className="px-3 py-2" data-testid="alpha-cell">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-block px-2.5 py-0.5 rounded-lg text-sm font-bold shadow-sm ${
+                          row.alpha >= 2 ? 'bg-green-500 text-white' :
+                          row.alpha >= 1 ? 'bg-green-400 text-white' :
+                          row.alpha >= 0 ? 'bg-green-200 text-green-800' :
+                          row.alpha >= -1 ? 'bg-red-200 text-red-800' :
+                          'bg-red-300 text-red-900'
+                        }`}>
+                          {row.alpha > 0 ? '+' : ''}{row.alpha.toFixed(2)}%
+                        </span>
+                        {/* Heart button - always visible */}
+                        {onToggleFavorite && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleFavorite(favoriteKey);
+                            }}
+                            className={`p-1 rounded transition-colors ${
+                              isFavorited
+                                ? 'text-pink-500 hover:text-pink-600'
+                                : 'text-gray-400 hover:text-pink-500'
+                            }`}
+                            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                            data-testid="favorite-pattern-button"
+                          >
+                            <svg className="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    {/* Avg/Mo - demoted to plain text */}
+                    <td className={`px-3 py-2 text-sm ${getAlphaColor(row.avgPerMonth)}`}>
+                      {row.avgPerMonth > 0 ? '+' : ''}{row.avgPerMonth.toFixed(2)}%
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600">
                       {row.avgReturn > 0 ? '+' : ''}{row.avgReturn.toFixed(1)}%
                     </td>
                     <td className={`px-3 py-2 text-sm ${getWinRateColor(row.winRate)}`}>
                       {row.winRate}%
-                    </td>
-                    <td className={`px-3 py-2 text-sm ${getAlphaColor(row.alpha)}`}>
-                      {row.alpha > 0 ? '+' : ''}{row.alpha.toFixed(2)}%
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-500">
                       {row.marketPerMonth > 0 ? '+' : ''}{row.marketPerMonth.toFixed(2)}%

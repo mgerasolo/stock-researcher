@@ -1,25 +1,66 @@
 import { useState, useEffect, useMemo } from 'react';
 
-export type TickerSentiment = 'up' | 'down' | null;
+export type TickerSentiment = 'up' | 'down' | 'investigate' | null;
 
 interface SentimentDetail {
   ticker: string;
-  sentiment: 'up' | 'down';
+  sentiment: 'up' | 'down' | 'investigate';
   name: string | null;
   note: string | null;
   created_at: string;
   updated_at: string;
 }
 
-interface SentimentPageProps {
-  tickerSentiments: Record<string, 'up' | 'down'>;
-  onSentimentChange: (ticker: string, sentiment: TickerSentiment) => void;
-  onSelectTicker: (ticker: string) => void;
+interface FavoritePattern {
+  ticker: string;
+  month: number;
+  holdingPeriod: number;
+  monthName: string;
 }
 
-export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTicker }: SentimentPageProps) {
-  const [viewMode, setViewMode] = useState<'all' | 'liked' | 'avoided'>('all');
+interface SentimentPageProps {
+  tickerSentiments: Record<string, 'up' | 'down' | 'investigate'>;
+  onSentimentChange: (ticker: string, sentiment: TickerSentiment) => void;
+  onSelectTicker: (ticker: string) => void;
+  favorites?: Set<string>;
+  onSelectPattern?: (ticker: string, month: number, holdingPeriod: number) => void;
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Parse favorite key into components
+function parseFavoriteKey(key: string): FavoritePattern | null {
+  const parts = key.split('-');
+  if (parts.length < 3) return null;
+  const holdingPeriod = parseInt(parts[parts.length - 1], 10);
+  const month = parseInt(parts[parts.length - 2], 10);
+  const ticker = parts.slice(0, -2).join('-');
+  if (isNaN(month) || isNaN(holdingPeriod) || month < 1 || month > 12) return null;
+  return { ticker, month, holdingPeriod, monthName: MONTH_NAMES[month - 1] };
+}
+
+export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTicker, favorites = new Set(), onSelectPattern }: SentimentPageProps) {
+  const [viewMode, setViewMode] = useState<'all' | 'liked' | 'investigate' | 'avoided'>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'ticker' | 'name'>('recent');
+
+  // Get favorites grouped by ticker
+  const favoritesByTicker = useMemo(() => {
+    const grouped: Record<string, FavoritePattern[]> = {};
+    favorites.forEach(key => {
+      const parsed = parseFavoriteKey(key);
+      if (parsed) {
+        if (!grouped[parsed.ticker]) {
+          grouped[parsed.ticker] = [];
+        }
+        grouped[parsed.ticker].push(parsed);
+      }
+    });
+    // Sort each ticker's favorites by month
+    Object.values(grouped).forEach(patterns => {
+      patterns.sort((a, b) => a.month - b.month || a.holdingPeriod - b.holdingPeriod);
+    });
+    return grouped;
+  }, [favorites]);
   const [detailedData, setDetailedData] = useState<SentimentDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
@@ -41,8 +82,9 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
   }, [tickerSentiments]); // Refetch when sentiments change
 
   // Filter and sort data
-  const { likedTickers, avoidedTickers } = useMemo(() => {
+  const { likedTickers, investigateTickers, avoidedTickers } = useMemo(() => {
     const liked = detailedData.filter((d) => d.sentiment === 'up');
+    const investigate = detailedData.filter((d) => d.sentiment === 'investigate');
     const avoided = detailedData.filter((d) => d.sentiment === 'down');
 
     const sortFn = (a: SentimentDetail, b: SentimentDetail) => {
@@ -57,6 +99,7 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
 
     return {
       likedTickers: [...liked].sort(sortFn),
+      investigateTickers: [...investigate].sort(sortFn),
       avoidedTickers: [...avoided].sort(sortFn),
     };
   }, [detailedData, sortBy]);
@@ -65,6 +108,7 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
 
   // Filter based on view mode
   const showLiked = viewMode === 'all' || viewMode === 'liked';
+  const showInvestigate = viewMode === 'all' || viewMode === 'investigate';
   const showAvoided = viewMode === 'all' || viewMode === 'avoided';
 
   // Format absolute date
@@ -159,27 +203,30 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
           <div className="text-center py-20 text-gray-500">
             <div className="text-6xl mb-4">
               <span className="inline-block">👍</span>
+              <span className="inline-block ml-2 font-bold text-amber-500">?</span>
               <span className="inline-block ml-2">👎</span>
             </div>
             <p className="text-xl mb-2">No tickers tagged yet</p>
-            <p className="text-sm">Use the thumbs up/down buttons on stocks to track your sentiment</p>
+            <p className="text-sm">Use the thumbs up/down/? buttons on stocks to track your sentiment</p>
           </div>
         </div>
       </div>
     );
   }
 
-  const renderTickerList = (tickers: SentimentDetail[], sentiment: 'up' | 'down') => {
-    const bgColor = sentiment === 'up' ? 'bg-green-50' : 'bg-red-50';
-    const hoverBgColor = sentiment === 'up' ? 'hover:bg-green-100' : 'hover:bg-red-100';
-    const borderColor = sentiment === 'up' ? 'border-green-200' : 'border-red-200';
-    const textColor = sentiment === 'up' ? 'text-green-700' : 'text-red-700';
-    const icon = sentiment === 'up' ? '👍' : '👎';
+  const renderTickerList = (tickers: SentimentDetail[], sentiment: 'up' | 'down' | 'investigate') => {
+    const bgColor = sentiment === 'up' ? 'bg-green-50' : sentiment === 'investigate' ? 'bg-amber-50' : 'bg-red-50';
+    const hoverBgColor = sentiment === 'up' ? 'hover:bg-green-100' : sentiment === 'investigate' ? 'hover:bg-amber-100' : 'hover:bg-red-100';
+    const borderColor = sentiment === 'up' ? 'border-green-200' : sentiment === 'investigate' ? 'border-amber-200' : 'border-red-200';
+    const textColor = sentiment === 'up' ? 'text-green-700' : sentiment === 'investigate' ? 'text-amber-700' : 'text-red-700';
+    const icon = sentiment === 'up' ? '👍' : sentiment === 'investigate' ? '?' : '👎';
 
     return tickers.map((item) => {
       const isExpanded = expandedTickers.has(item.ticker);
       const isEditing = editingNote === item.ticker;
       const notePreview = truncateNote(item.note);
+      const tickerFavorites = favoritesByTicker[item.ticker] || [];
+      const favoriteCount = tickerFavorites.length;
 
       return (
         <div
@@ -191,11 +238,36 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
             className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${hoverBgColor} group`}
             onClick={() => onSelectTicker(item.ticker)}
           >
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              <span className="text-lg">{icon}</span>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {/* Expand toggle - now on the left */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExpand(item.ticker);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-gray-600 transition-colors flex-shrink-0"
+                title={isExpanded ? 'Collapse' : 'Expand'}
+                data-testid="ticker-expand-toggle"
+              >
+                <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <span className="text-lg flex-shrink-0">{icon}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className={`font-bold ${textColor}`}>{item.ticker}</span>
+                  {/* Favorites count badge */}
+                  {favoriteCount > 0 && (
+                    <span className="relative inline-flex items-center" title={`${favoriteCount} favorite pattern${favoriteCount !== 1 ? 's' : ''}`}>
+                      <svg className="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                      </svg>
+                      <span className="absolute -top-1.5 -right-2 bg-pink-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                        {favoriteCount}
+                      </span>
+                    </span>
+                  )}
                   {item.name && (
                     <span className="text-gray-600 truncate text-sm">{item.name}</span>
                   )}
@@ -209,20 +281,6 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
               </div>
             </div>
             <div className="flex items-center gap-1">
-              {/* Expand toggle */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleExpand(item.ticker);
-                }}
-                className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-gray-600 transition-colors"
-                title={isExpanded ? 'Collapse' : 'Expand'}
-                data-testid="ticker-expand-toggle"
-              >
-                <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
               {/* Edit note button */}
               <button
                 onClick={(e) => {
@@ -239,13 +297,13 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </button>
-              {/* Toggle sentiment button */}
+              {/* Toggle sentiment button - now always visible */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onSentimentChange(item.ticker, sentiment === 'up' ? 'down' : 'up');
                 }}
-                className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
+                className={`p-1.5 rounded-lg transition-colors ${
                   sentiment === 'up'
                     ? 'text-gray-400 hover:bg-red-100 hover:text-red-500'
                     : 'text-gray-400 hover:bg-green-100 hover:text-green-500'
@@ -262,13 +320,13 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                   </svg>
                 )}
               </button>
-              {/* Remove button */}
+              {/* Remove button - now always visible */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onSentimentChange(item.ticker, null);
                 }}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white transition-colors"
                 title="Remove from list"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -341,6 +399,9 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                 {likedTickers.length > 0 && (
                   <span className="ml-2 text-green-600">{likedTickers.length} liked</span>
                 )}
+                {investigateTickers.length > 0 && (
+                  <span className="ml-2 text-amber-600">{investigateTickers.length} to investigate</span>
+                )}
                 {avoidedTickers.length > 0 && (
                   <span className="ml-2 text-red-500">{avoidedTickers.length} avoided</span>
                 )}
@@ -368,6 +429,17 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                   }`}
                 >
                   <span className="text-green-500">👍</span> Liked
+                </button>
+                <button
+                  onClick={() => setViewMode('investigate')}
+                  className={`px-3 py-1 rounded text-sm font-medium transition-colors flex items-center gap-1 ${
+                    viewMode === 'investigate'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                  data-testid="filter-investigate"
+                >
+                  <span className="text-amber-500 font-bold">?</span> Investigate
                 </button>
                 <button
                   onClick={() => setViewMode('avoided')}
@@ -423,6 +495,30 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
               </div>
             )}
 
+            {/* Investigate Tickers Section */}
+            {showInvestigate && (
+              <div className="bg-white rounded-lg border border-amber-200 shadow-sm overflow-hidden" data-testid="investigate-section">
+                <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-bold text-amber-500">?</span>
+                    <h3 className="font-semibold text-amber-800">To Investigate</h3>
+                    <span className="ml-auto text-sm text-amber-600 font-medium">
+                      {investigateTickers.length}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-4 space-y-2 max-h-[60vh] overflow-auto">
+                  {investigateTickers.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic text-center py-4">
+                      No tickers to investigate yet
+                    </p>
+                  ) : (
+                    renderTickerList(investigateTickers, 'investigate')
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Avoided Tickers Section */}
             {showAvoided && (
               <div className="bg-white rounded-lg border border-red-200 shadow-sm overflow-hidden">
@@ -450,14 +546,28 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
         ) : (
           /* Single list view for filtered mode */
           <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden max-w-2xl mx-auto">
-            <div className={`px-4 py-3 border-b ${viewMode === 'liked' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className={`px-4 py-3 border-b ${
+              viewMode === 'liked' ? 'bg-green-50 border-green-200' :
+              viewMode === 'investigate' ? 'bg-amber-50 border-amber-200' :
+              'bg-red-50 border-red-200'
+            }`}>
               <div className="flex items-center gap-2">
-                <span className="text-xl">{viewMode === 'liked' ? '👍' : '👎'}</span>
-                <h3 className={`font-semibold ${viewMode === 'liked' ? 'text-green-800' : 'text-red-800'}`}>
-                  {viewMode === 'liked' ? 'Liked' : 'Avoided'} Tickers
+                <span className="text-xl">
+                  {viewMode === 'liked' ? '👍' : viewMode === 'investigate' ? <span className="font-bold text-amber-500">?</span> : '👎'}
+                </span>
+                <h3 className={`font-semibold ${
+                  viewMode === 'liked' ? 'text-green-800' :
+                  viewMode === 'investigate' ? 'text-amber-800' :
+                  'text-red-800'
+                }`}>
+                  {viewMode === 'liked' ? 'Liked' : viewMode === 'investigate' ? 'To Investigate' : 'Avoided'} Tickers
                 </h3>
-                <span className={`ml-auto text-sm font-medium ${viewMode === 'liked' ? 'text-green-600' : 'text-red-600'}`}>
-                  {viewMode === 'liked' ? likedTickers.length : avoidedTickers.length}
+                <span className={`ml-auto text-sm font-medium ${
+                  viewMode === 'liked' ? 'text-green-600' :
+                  viewMode === 'investigate' ? 'text-amber-600' :
+                  'text-red-600'
+                }`}>
+                  {viewMode === 'liked' ? likedTickers.length : viewMode === 'investigate' ? investigateTickers.length : avoidedTickers.length}
                 </span>
               </div>
             </div>
@@ -467,6 +577,12 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                   <p className="text-sm text-gray-400 italic text-center py-4">No liked tickers yet</p>
                 ) : (
                   renderTickerList(likedTickers, 'up')
+                )
+              ) : viewMode === 'investigate' ? (
+                investigateTickers.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic text-center py-4">No tickers to investigate yet</p>
+                ) : (
+                  renderTickerList(investigateTickers, 'investigate')
                 )
               ) : (
                 avoidedTickers.length === 0 ? (
@@ -493,6 +609,18 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
                 className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 Clear all liked
+              </button>
+            )}
+            {investigateTickers.length > 0 && (
+              <button
+                onClick={() => {
+                  if (confirm(`Clear all ${investigateTickers.length} tickers to investigate?`)) {
+                    investigateTickers.forEach(item => onSentimentChange(item.ticker, null));
+                  }
+                }}
+                className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                Clear all investigate
               </button>
             )}
             {avoidedTickers.length > 0 && (

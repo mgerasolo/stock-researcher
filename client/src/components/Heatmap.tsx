@@ -345,6 +345,19 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
     );
   }, [data?.aggregates, filters, trimmedAvgByMonth, calcMethod, holdingPeriod]);
 
+  // Get filtered months (months that DON'T meet criteria - for dimming in chart)
+  const filteredMonths = useMemo(() => {
+    if (!filters) return new Set<number>();
+    const allMonths = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    const filtered = new Set<number>();
+    for (const month of allMonths) {
+      if (!highlightedMonths.has(month)) {
+        filtered.add(month);
+      }
+    }
+    return filtered;
+  }, [filters, highlightedMonths]);
+
   // Check if this month should have report highlight (yellow)
   const isReportHighlight = (month: number) => highlightMonth === month;
 
@@ -444,6 +457,7 @@ export function Heatmap({ ticker, viewMode, holdingPeriod, calcMethod, defaultEx
               <ScatterPlot
                 data={data.data}
                 ticker={ticker}
+                filteredMonths={filteredMonths}
               />
             )}
 
