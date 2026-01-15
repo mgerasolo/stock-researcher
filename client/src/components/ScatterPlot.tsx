@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
-  ScatterChart,
-  Scatter,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -41,13 +41,18 @@ function detectOutliers(values: number[]): { lower: number; upper: number } {
   };
 }
 
+interface BarDataPoint {
+  id: string;
+  year: number;
+  month: number;
+  return_pct: number;
+  isOutlier: boolean;
+  // Position for grouped display: month + offset based on year index
+  x: number;
+}
+
 interface TooltipPayload {
-  payload: {
-    year: number;
-    return_pct: number;
-    month: number;
-    isOutlier: boolean;
-  };
+  payload: BarDataPoint;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,33 +82,46 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
 
   const displayMonth = selectedMonth ?? hoveredMonth;
 
-  // Process data for the scatter plot
-  const { chartData, avgReturn, displayData } = useMemo(() => {
-    // Filter out null returns and prepare data
+  // Process data for the bar chart - group by month, order by year
+  const { barData, avgReturn, years } = useMemo(() => {
+    // Filter out null returns
     const validData = data
-      .filter((d): d is DataPoint & { return_pct: number } => d.return_pct !== null)
-      .map(d => ({
-        year: d.year,
-        month: d.month,
-        return_pct: d.return_pct,
-        x: d.month, // X-axis is month (1-12)
-        y: d.return_pct, // Y-axis is return percentage
-      }));
+      .filter((d): d is DataPoint & { return_pct: number } => d.return_pct !== null);
+
+    // Get unique years sorted
+    const uniqueYears = [...new Set(validData.map(d => d.year))].sort((a, b) => a - b);
+    const yearCount = uniqueYears.length;
 
     // Filter for selected/hovered month if applicable
     const filtered = displayMonth
       ? validData.filter(d => d.month === displayMonth)
       : validData;
 
-    // Calculate outliers
+    // Calculate outliers for the filtered data
     const returns = filtered.map(d => d.return_pct);
     const bounds = detectOutliers(returns);
 
-    // Mark outliers
-    const withOutliers = filtered.map(d => ({
-      ...d,
-      isOutlier: d.return_pct < bounds.lower || d.return_pct > bounds.upper,
-    }));
+    // Create bar data with x positions that group bars by month
+    // Each month spans from (month - 0.4) to (month + 0.4), divided among years
+    const barWidth = 0.8 / yearCount; // Width per bar within each month
+
+    const bars: BarDataPoint[] = filtered.map(d => {
+      const yearIndex = uniqueYears.indexOf(d.year);
+      // Position within month: start at month - 0.4, add offset for each year
+      const xOffset = -0.4 + (yearIndex + 0.5) * barWidth;
+
+      return {
+        id: `${d.year}-${d.month}`,
+        year: d.year,
+        month: d.month,
+        return_pct: d.return_pct,
+        isOutlier: d.return_pct < bounds.lower || d.return_pct > bounds.upper,
+        x: d.month + xOffset,
+      };
+    });
+
+    // Sort by x position for proper rendering
+    bars.sort((a, b) => a.x - b.x);
 
     // Calculate average
     const avg = returns.length > 0
@@ -111,19 +129,22 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
       : 0;
 
     return {
-      chartData: validData,
+      barData: bars,
       avgReturn: avg,
-      displayData: withOutliers,
+      years: uniqueYears,
     };
   }, [data, displayMonth]);
 
-  if (chartData.length === 0) {
+  if (barData.length === 0) {
     return null;
   }
 
   const title = displayMonth
     ? `${ticker ? ticker + ' - ' : ''}${MONTHS[displayMonth - 1]} Returns Distribution`
     : `${ticker ? ticker + ' - ' : ''}Monthly Returns Distribution`;
+
+  // Calculate bar width based on number of data points and months displayed
+  const barSize = displayMonth ? Math.max(8, Math.min(20, 400 / years.length)) : Math.max(3, Math.min(8, 400 / barData.length));
 
   return (
     <div data-testid="scatter-plot" className="bg-slate-900 rounded-lg p-4 mb-4">
@@ -164,26 +185,33 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
 
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
-          <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 40 }}>
+          <BarChart
+            data={barData}
+            margin={{ top: 10, right: 20, bottom: 20, left: 40 }}
+            barCategoryGap={0}
+            barGap={0}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
             <XAxis
               dataKey="x"
               type="number"
-              domain={[0.5, 12.5]}
-              ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}
-              tickFormatter={(value) => MONTHS[value - 1] || ''}
+              domain={displayMonth ? [displayMonth - 0.5, displayMonth + 0.5] : [0.5, 12.5]}
+              ticks={displayMonth ? [displayMonth] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]}
+              tickFormatter={(value) => {
+                const month = Math.round(value);
+                return MONTHS[month - 1] || '';
+              }}
               tick={{ fill: '#9CA3AF', fontSize: 10 }}
               axisLine={{ stroke: '#4B5563' }}
               tickLine={{ stroke: '#4B5563' }}
             />
             <YAxis
-              dataKey="y"
               tick={{ fill: '#9CA3AF', fontSize: 10 }}
               axisLine={{ stroke: '#4B5563' }}
               tickLine={{ stroke: '#4B5563' }}
               tickFormatter={(value) => `${value}%`}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(107, 114, 128, 0.1)' }} />
 
             {/* Average reference line */}
             <ReferenceLine
@@ -196,10 +224,10 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
             {/* Zero reference line */}
             <ReferenceLine y={0} stroke="#6B7280" strokeWidth={1} />
 
-            <Scatter data={displayData} dataKey="y">
-              {displayData.map((entry, index) => (
+            <Bar dataKey="return_pct" maxBarSize={barSize}>
+              {barData.map((entry) => (
                 <Cell
-                  key={`cell-${index}`}
+                  key={entry.id}
                   data-testid={entry.isOutlier ? 'outlier-point' : 'data-point'}
                   data-outlier={entry.isOutlier ? 'true' : 'false'}
                   data-positive={entry.return_pct >= 0 ? 'true' : 'false'}
@@ -210,32 +238,36 @@ export function ScatterPlot({ data, selectedMonth, onMonthSelect, ticker }: Scat
                       ? '#10B981' // Green for positive
                       : '#EF4444' // Red for negative
                   }
-                  r={entry.isOutlier ? 6 : 4}
                 />
               ))}
-            </Scatter>
-          </ScatterChart>
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Legend */}
       <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
         <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-green-500"></span>
+          <span className="w-3 h-3 rounded-sm bg-green-500"></span>
           <span>Positive</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-red-500"></span>
+          <span className="w-3 h-3 rounded-sm bg-red-500"></span>
           <span>Negative</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+          <span className="w-3 h-3 rounded-sm bg-amber-500"></span>
           <span>Outlier</span>
         </div>
         <div className="flex items-center gap-1">
           <span className="w-6 border-t-2 border-dashed border-purple-500"></span>
           <span>Avg: {avgReturn.toFixed(1)}%</span>
         </div>
+        {years.length > 0 && (
+          <div className="text-slate-500 ml-auto">
+            {years[0]}→{years[years.length - 1]} ({years.length} years)
+          </div>
+        )}
       </div>
     </div>
   );

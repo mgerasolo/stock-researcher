@@ -39,16 +39,15 @@ test.describe('Issue #3: Scatter Plot Visualization', () => {
   });
 
   test('should show data points representing yearly returns', async ({ page }) => {
-    // Recharts renders scatter points as SVG shapes (circles or symbols)
+    // Recharts renders bar chart as SVG rectangles
     const scatterPlot = page.locator('[data-testid="scatter-plot"]').first();
     await expect(scatterPlot).toBeVisible();
 
-    // Look for any scatter point elements in the Recharts chart
-    // Recharts uses circles, symbols, or custom shapes
-    const svgPoints = scatterPlot.locator('svg circle, svg .recharts-symbols');
-    const count = await svgPoints.count();
+    // Look for bar elements in the Recharts chart (bars are rendered as rectangles)
+    const svgBars = scatterPlot.locator('svg .recharts-bar-rectangle');
+    const count = await svgBars.count();
 
-    // Should have data visualization elements
+    // Should have data visualization elements (bars for yearly returns)
     expect(count).toBeGreaterThan(0);
   });
 

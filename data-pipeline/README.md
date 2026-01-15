@@ -31,9 +31,21 @@ python fetch_historical.py --ticker AAPL
 python fetch_historical.py --tier 1 --monthly
 ```
 
-### Fetch all stocks
+### Fetch all Tier 1+2 stocks
 ```bash
 python fetch_historical.py --all
+```
+
+### Fetch S&P 500 stocks (Tier 3 - 503 stocks)
+```bash
+python fetch_historical.py --sp500
+# or equivalently:
+python fetch_historical.py --tier 3
+```
+
+### Fetch ALL major stocks (~540 stocks)
+```bash
+python fetch_historical.py --all-major
 ```
 
 ## Data Output
@@ -61,6 +73,15 @@ psql -d stock_researcher -f schema.sql
 - AAPL, TSLA, AMZN, MSFT, GOOGL, NVDA, RCL, ASML, AMD, WMT, SBUX, NFLX, COIN, DAKT, KEN, CVX
 
 **Tier 2 (~70 stocks)**: From portfolio watchlist, import after Tier 1 validated
+
+**Tier 3 (503 stocks)**: S&P 500 - most actively traded US stocks
+- Covers ~80% of US market capitalization
+- Source: [SlickCharts S&P 500](https://www.slickcharts.com/sp500)
+- See `sp500_stocks.py` for full list
+
+**All-Major (~540 stocks)**: S&P 500 + additional high-volume non-S&P stocks
+- Includes popular growth stocks: SHOP, RIVN, NIO, SNOW, etc.
+- Includes major international ADRs: TSM, BABA, ASML, etc.
 
 ## Notes
 

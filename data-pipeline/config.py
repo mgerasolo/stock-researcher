@@ -41,6 +41,12 @@ TIER_2_STOCKS = [
     "VRT", "WDAY", "WFC", "XYZ", "ZM", "ZS",
 ]
 
+# Tier 3 stocks - S&P 500 (most actively traded US stocks)
+# Import from dedicated file for cleaner organization
+from sp500_stocks import SP500_STOCKS, HIGH_VOLUME_NON_SP500, ALL_MAJOR_STOCKS
+
+TIER_3_STOCKS = SP500_STOCKS  # All 503 S&P 500 component stocks
+
 # Data fetching configuration
 START_DATE = "2000-01-01"  # Fetch data from 2000 onwards
 END_DATE = None  # None = fetch up to today

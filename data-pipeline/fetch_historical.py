@@ -6,10 +6,19 @@ Fetches daily OHLC data from Yahoo Finance using yfinance library.
 Data is split-adjusted by default (auto_adjust=True).
 
 Usage:
-    python fetch_historical.py --tier 1        # Fetch Tier 1 stocks only
-    python fetch_historical.py --tier 2        # Fetch Tier 2 stocks only
+    python fetch_historical.py --tier 1        # Fetch Tier 1 stocks (16 priority)
+    python fetch_historical.py --tier 2        # Fetch Tier 2 stocks (~70 portfolio)
+    python fetch_historical.py --tier 3        # Fetch Tier 3 stocks (S&P 500)
+    python fetch_historical.py --sp500         # Same as --tier 3
+    python fetch_historical.py --all-major     # Fetch all ~540 major stocks
     python fetch_historical.py --ticker AAPL   # Fetch single stock
-    python fetch_historical.py --all           # Fetch all stocks
+    python fetch_historical.py --all           # Fetch tiers 1+2
+
+Stock Tiers:
+    Tier 1 (16 stocks):  Priority list with Excel references for validation
+    Tier 2 (~70 stocks): Portfolio watchlist
+    Tier 3 (503 stocks): S&P 500 - most actively traded US stocks
+    All-Major (~540):    S&P 500 + additional high-volume stocks
 """
 
 import argparse
@@ -23,10 +32,12 @@ import yfinance as yf
 from config import (
     TIER_1_STOCKS,
     TIER_2_STOCKS,
+    TIER_3_STOCKS,
     START_DATE,
     END_DATE,
     DELAY_BETWEEN_FETCHES,
 )
+from sp500_stocks import ALL_MAJOR_STOCKS
 
 
 def fetch_stock_data(
@@ -192,9 +203,11 @@ def aggregate_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch historical stock data')
-    parser.add_argument('--tier', type=int, choices=[1, 2], help='Fetch stocks by tier')
+    parser.add_argument('--tier', type=int, choices=[1, 2, 3], help='Fetch stocks by tier (1=priority, 2=portfolio, 3=S&P500)')
     parser.add_argument('--ticker', type=str, help='Fetch single ticker')
-    parser.add_argument('--all', action='store_true', help='Fetch all stocks')
+    parser.add_argument('--all', action='store_true', help='Fetch all tiers 1+2')
+    parser.add_argument('--all-major', action='store_true', help='Fetch ALL major stocks (S&P500 + high-volume)')
+    parser.add_argument('--sp500', action='store_true', help='Fetch S&P 500 stocks only')
     parser.add_argument('--start', type=str, default=START_DATE, help='Start date (YYYY-MM-DD)')
     parser.add_argument('--end', type=str, default=END_DATE, help='End date (YYYY-MM-DD)')
     parser.add_argument('--output', type=str, help='Output CSV filename')
@@ -209,6 +222,11 @@ def main():
         tickers = TIER_1_STOCKS
     elif args.tier == 2:
         tickers = TIER_2_STOCKS
+    elif args.tier == 3 or args.sp500:
+        tickers = TIER_3_STOCKS
+    elif args.all_major:
+        # All S&P 500 + additional high-volume stocks (deduplicated)
+        tickers = list(dict.fromkeys(ALL_MAJOR_STOCKS))
     elif args.all:
         tickers = TIER_1_STOCKS + TIER_2_STOCKS
     else:
