@@ -1,0 +1,17 @@
+# Gitleaks configuration
+# See: https://github.com/gitleaks/gitleaks
+
+title = "NLF Gitleaks Config"
+
+[extend]
+# Use default gitleaks rules
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+    .gitleaks.toml,
+    package-lock.json,
+    pnpm-lock.yaml,
+    yarn.lock,
+]
