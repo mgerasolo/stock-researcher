@@ -116,18 +116,15 @@ test.describe('Issue #3: Scatter Plot Visualization', () => {
     const scatterPlot = page.locator('[data-testid="scatter-plot"]').first();
     await expect(scatterPlot).toBeVisible();
 
-    // Check for color legend entries
-    const positiveLegend = scatterPlot.locator('span:has-text("Positive")');
-    const negativeLegend = scatterPlot.locator('span:has-text("Negative")');
-
-    await expect(positiveLegend).toBeVisible();
-    await expect(negativeLegend).toBeVisible();
-
-    // Check for colored circles in the legend
+    // Check for color legend indicators (compact: +/- symbols)
     const greenDot = scatterPlot.locator('.bg-green-500').first();
     const redDot = scatterPlot.locator('.bg-red-500').first();
 
     await expect(greenDot).toBeVisible();
     await expect(redDot).toBeVisible();
+
+    // Also check for outlier indicator
+    const amberDot = scatterPlot.locator('.bg-amber-500').first();
+    await expect(amberDot).toBeVisible();
   });
 });
