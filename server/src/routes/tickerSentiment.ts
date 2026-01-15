@@ -6,6 +6,7 @@ export const tickerSentimentRouter = Router();
 interface TickerSentiment {
   ticker: string;
   sentiment: 'up' | 'down';
+  note: string | null;
   updated_at: Date;
   created_at: Date;
 }
@@ -14,6 +15,7 @@ interface TickerSentimentDetail {
   ticker: string;
   sentiment: 'up' | 'down';
   name: string | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,6 +46,7 @@ tickerSentimentRouter.get('/detailed', async (_req, res) => {
         ts.ticker,
         ts.sentiment,
         s.name,
+        ts.note,
         ts.created_at,
         ts.updated_at
       FROM ticker_sentiment ts
@@ -91,5 +94,38 @@ tickerSentimentRouter.delete('/:ticker', async (req, res) => {
   } catch (error) {
     console.error('Error removing ticker sentiment:', error);
     res.status(500).json({ error: 'Failed to remove ticker sentiment' });
+  }
+});
+
+// PATCH /api/ticker-sentiment/:ticker/note - Update note for a ticker
+tickerSentimentRouter.patch('/:ticker/note', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase();
+  const { note } = req.body;
+
+  // Note can be null (to remove) or string up to 2000 chars
+  if (note !== null && typeof note !== 'string') {
+    return res.status(400).json({ error: 'Invalid note. Must be string or null' });
+  }
+
+  if (note && note.length > 2000) {
+    return res.status(400).json({ error: 'Note too long. Maximum 2000 characters' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE ticker_sentiment SET note = $1, updated_at = NOW()
+       WHERE ticker = $2
+       RETURNING ticker, sentiment, note`,
+      [note || null, ticker]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticker sentiment not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error setting ticker note:', error);
+    res.status(500).json({ error: 'Failed to set ticker note' });
   }
 });

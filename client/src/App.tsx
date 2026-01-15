@@ -53,6 +53,7 @@ function App() {
   const [highlightCell, setHighlightCell] = useState<{ entryMonth: number; holdingPeriod: number } | null>(null);
   const [yearsToShow, setYearsToShow] = useState(12);
   const [tickerSentiments, setTickerSentiments] = useState<Record<string, 'up' | 'down'>>({});
+  const [tickerNotes, setTickerNotes] = useState<Record<string, string>>({});
   const [patternRatings, setPatternRatings] = useState<Record<string, number>>({});
   const [patternNotes, setPatternNotes] = useState<Record<string, string>>({});
   const [useHeatmapV2, setUseHeatmapV2] = useState(false); // Toggle between V1 and V2 heatmap
@@ -151,11 +152,22 @@ function App() {
       .catch(() => {});
   }, []);
 
-  // Fetch ticker sentiments from API on mount
+  // Fetch ticker sentiments and notes from API on mount
   useEffect(() => {
-    fetch('/api/ticker-sentiment')
+    fetch('/api/ticker-sentiment/detailed')
       .then(res => res.json())
-      .then(data => setTickerSentiments(data))
+      .then((data: Array<{ ticker: string; sentiment: 'up' | 'down'; note: string | null }>) => {
+        const sentiments: Record<string, 'up' | 'down'> = {};
+        const notes: Record<string, string> = {};
+        data.forEach(item => {
+          sentiments[item.ticker] = item.sentiment;
+          if (item.note) {
+            notes[item.ticker] = item.note;
+          }
+        });
+        setTickerSentiments(sentiments);
+        setTickerNotes(notes);
+      })
       .catch(() => {});
   }, []);
 
@@ -305,6 +317,11 @@ function App() {
     try {
       if (sentiment === null) {
         await fetch(`/api/ticker-sentiment/${ticker}`, { method: 'DELETE' });
+        // Also remove the note from local state
+        setTickerNotes((prev) => {
+          const { [ticker]: _, ...rest } = prev;
+          return rest;
+        });
       } else {
         await fetch(`/api/ticker-sentiment/${ticker}`, {
           method: 'PUT',
@@ -314,9 +331,55 @@ function App() {
       }
     } catch {
       // Revert on error by re-fetching
-      fetch('/api/ticker-sentiment')
+      fetch('/api/ticker-sentiment/detailed')
         .then(res => res.json())
-        .then(data => setTickerSentiments(data))
+        .then((data: Array<{ ticker: string; sentiment: 'up' | 'down'; note: string | null }>) => {
+          const sentiments: Record<string, 'up' | 'down'> = {};
+          const notes: Record<string, string> = {};
+          data.forEach(item => {
+            sentiments[item.ticker] = item.sentiment;
+            if (item.note) {
+              notes[item.ticker] = item.note;
+            }
+          });
+          setTickerSentiments(sentiments);
+          setTickerNotes(notes);
+        })
+        .catch(() => {});
+    }
+  };
+
+  // Handle ticker note change
+  const handleTickerNoteChange = async (ticker: string, note: string | null) => {
+    // Optimistically update UI
+    setTickerNotes((prev) => {
+      if (note === null || note === '') {
+        const { [ticker]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [ticker]: note };
+    });
+
+    // Persist to API
+    try {
+      await fetch(`/api/ticker-sentiment/${ticker}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note }),
+      });
+    } catch {
+      // Revert on error by re-fetching
+      fetch('/api/ticker-sentiment/detailed')
+        .then(res => res.json())
+        .then((data: Array<{ ticker: string; sentiment: 'up' | 'down'; note: string | null }>) => {
+          const notes: Record<string, string> = {};
+          data.forEach(item => {
+            if (item.note) {
+              notes[item.ticker] = item.note;
+            }
+          });
+          setTickerNotes(notes);
+        })
         .catch(() => {});
     }
   };
@@ -793,6 +856,8 @@ function App() {
                     ticker={selectedTicker}
                     sentiment={tickerSentiments[selectedTicker] || null}
                     onSentimentChange={handleSentimentChange}
+                    note={tickerNotes[selectedTicker] || null}
+                    onNoteChange={handleTickerNoteChange}
                   />
 
                   {/* All Timeframes */}

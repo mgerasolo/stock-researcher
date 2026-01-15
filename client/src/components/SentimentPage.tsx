@@ -6,6 +6,7 @@ interface SentimentDetail {
   ticker: string;
   sentiment: 'up' | 'down';
   name: string | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,9 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
   const [sortBy, setSortBy] = useState<'recent' | 'ticker' | 'name'>('recent');
   const [detailedData, setDetailedData] = useState<SentimentDetail[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState<string>('');
 
   // Fetch detailed sentiment data
   useEffect(() => {
@@ -63,27 +67,63 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
   const showLiked = viewMode === 'all' || viewMode === 'liked';
   const showAvoided = viewMode === 'all' || viewMode === 'avoided';
 
-  // Format relative time
-  const formatRelativeTime = (dateStr: string) => {
+  // Format absolute date
+  const formatAbsoluteDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
-    if (diffDays === 0) {
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      if (diffHours === 0) {
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        return diffMins <= 1 ? 'Just now' : `${diffMins}m ago`;
+  // Toggle ticker expansion
+  const toggleExpand = (ticker: string) => {
+    setExpandedTickers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ticker)) {
+        newSet.delete(ticker);
+      } else {
+        newSet.add(ticker);
       }
-      return `${diffHours}h ago`;
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return `${diffDays}d ago`;
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return newSet;
+    });
+  };
+
+  // Start editing a note
+  const startEditingNote = (ticker: string, currentNote: string | null) => {
+    setEditingNote(ticker);
+    setNoteText(currentNote || '');
+  };
+
+  // Save note
+  const saveNote = async (ticker: string) => {
+    try {
+      await fetch(`/api/ticker-sentiment/${ticker}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: noteText || null }),
+      });
+      // Update local state
+      setDetailedData(prev =>
+        prev.map(item =>
+          item.ticker === ticker ? { ...item, note: noteText || null } : item
+        )
+      );
+      setEditingNote(null);
+      setNoteText('');
+    } catch (error) {
+      console.error('Failed to save note:', error);
     }
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingNote(null);
+    setNoteText('');
+  };
+
+  // Truncate note for preview
+  const truncateNote = (note: string | null, maxLen = 50) => {
+    if (!note) return null;
+    if (note.length <= maxLen) return note;
+    return note.slice(0, maxLen).trim() + '...';
   };
 
   if (isLoading) {
@@ -130,71 +170,162 @@ export function SentimentPage({ tickerSentiments, onSentimentChange, onSelectTic
   }
 
   const renderTickerList = (tickers: SentimentDetail[], sentiment: 'up' | 'down') => {
-    const bgColor = sentiment === 'up' ? 'bg-green-50 hover:bg-green-100' : 'bg-red-50 hover:bg-red-100';
+    const bgColor = sentiment === 'up' ? 'bg-green-50' : 'bg-red-50';
+    const hoverBgColor = sentiment === 'up' ? 'hover:bg-green-100' : 'hover:bg-red-100';
     const borderColor = sentiment === 'up' ? 'border-green-200' : 'border-red-200';
     const textColor = sentiment === 'up' ? 'text-green-700' : 'text-red-700';
     const icon = sentiment === 'up' ? '👍' : '👎';
 
-    return tickers.map((item) => (
-      <div
-        key={item.ticker}
-        className={`flex items-center justify-between px-4 py-3 ${bgColor} rounded-lg cursor-pointer transition-colors border ${borderColor} group`}
-        onClick={() => onSelectTicker(item.ticker)}
-      >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <span className="text-lg">{icon}</span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className={`font-bold ${textColor}`}>{item.ticker}</span>
-              {item.name && (
-                <span className="text-gray-600 truncate text-sm">{item.name}</span>
-              )}
+    return tickers.map((item) => {
+      const isExpanded = expandedTickers.has(item.ticker);
+      const isEditing = editingNote === item.ticker;
+      const notePreview = truncateNote(item.note);
+
+      return (
+        <div
+          key={item.ticker}
+          className={`${bgColor} rounded-lg border ${borderColor} overflow-hidden`}
+        >
+          {/* Main row */}
+          <div
+            className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${hoverBgColor} group`}
+            onClick={() => onSelectTicker(item.ticker)}
+          >
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <span className="text-lg">{icon}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold ${textColor}`}>{item.ticker}</span>
+                  {item.name && (
+                    <span className="text-gray-600 truncate text-sm">{item.name}</span>
+                  )}
+                </div>
+                {/* Note preview (when not expanded) */}
+                {!isExpanded && notePreview && (
+                  <div className="text-xs text-gray-500 mt-0.5 truncate" data-testid="ticker-note-preview">
+                    {notePreview}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-xs text-gray-400 mt-0.5">
-              Added {formatRelativeTime(item.created_at)}
+            <div className="flex items-center gap-1">
+              {/* Expand toggle */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExpand(item.ticker);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:bg-white hover:text-gray-600 transition-colors"
+                title={isExpanded ? 'Collapse' : 'Expand'}
+                data-testid="ticker-expand-toggle"
+              >
+                <svg className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {/* Edit note button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEditingNote(item.ticker, item.note);
+                }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  item.note ? 'text-blue-500 hover:bg-blue-50' : 'text-gray-400 hover:bg-white hover:text-blue-500'
+                }`}
+                title={item.note ? 'Edit note' : 'Add note'}
+                data-testid="ticker-note-button"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              {/* Toggle sentiment button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSentimentChange(item.ticker, sentiment === 'up' ? 'down' : 'up');
+                }}
+                className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
+                  sentiment === 'up'
+                    ? 'text-gray-400 hover:bg-red-100 hover:text-red-500'
+                    : 'text-gray-400 hover:bg-green-100 hover:text-green-500'
+                }`}
+                title={sentiment === 'up' ? 'Switch to avoid' : 'Switch to like'}
+              >
+                {sentiment === 'up' ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                  </svg>
+                )}
+              </button>
+              {/* Remove button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSentimentChange(item.ticker, null);
+                }}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Remove from list"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
+
+          {/* Expanded content */}
+          {isExpanded && !isEditing && (
+            <div className="px-4 pb-3 border-t border-gray-100">
+              {item.note ? (
+                <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.note}</p>
+              ) : (
+                <p className="text-sm text-gray-400 mt-2 italic">No notes yet</p>
+              )}
+              <div className="text-xs text-gray-400 mt-2" data-testid="ticker-date">
+                Added: {formatAbsoluteDate(item.created_at)}
+              </div>
+            </div>
+          )}
+
+          {/* Note editing */}
+          {isEditing && (
+            <div className="px-4 pb-3 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+              <textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value.slice(0, 2000))}
+                className="w-full mt-2 p-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                rows={3}
+                placeholder="Add notes about this ticker..."
+                data-testid="ticker-note-input"
+                autoFocus
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-400">{noteText.length}/2000</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => saveNote(item.ticker)}
+                    className="px-3 py-1 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-lg transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          {/* Toggle sentiment button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSentimentChange(item.ticker, sentiment === 'up' ? 'down' : 'up');
-            }}
-            className={`p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
-              sentiment === 'up'
-                ? 'text-gray-400 hover:bg-red-100 hover:text-red-500'
-                : 'text-gray-400 hover:bg-green-100 hover:text-green-500'
-            }`}
-            title={sentiment === 'up' ? 'Switch to avoid' : 'Switch to like'}
-          >
-            {sentiment === 'up' ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-              </svg>
-            )}
-          </button>
-          {/* Remove button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSentimentChange(item.ticker, null);
-            }}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
-            title="Remove from list"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    ));
+      );
+    });
   };
 
   return (
