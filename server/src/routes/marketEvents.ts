@@ -108,6 +108,29 @@ marketEventsRouter.get('/black-swan-months', async (_req, res) => {
   }
 });
 
+// GET /api/market-events/black-swans - Get all black swan events
+// Returns events with type 'black_swan' or 'crash'
+marketEventsRouter.get('/black-swans', async (_req, res) => {
+  try {
+    const events = await query<MarketEvent>(`
+      SELECT id, event_type, event_date as start_date, end_date, title as name,
+             description, sp500_impact, sectors_affected, impact
+      FROM market_events
+      WHERE event_type IN ('black_swan', 'crash')
+      ORDER BY event_date DESC
+    `);
+    // Convert sp500_impact to number
+    const formattedEvents = events.map(e => ({
+      ...e,
+      sp500_impact: e.sp500_impact ? parseFloat(String(e.sp500_impact)) : null
+    }));
+    res.json(formattedEvents);
+  } catch (error) {
+    console.error('Error fetching black swan events:', error);
+    res.status(500).json({ error: 'Failed to fetch black swan events' });
+  }
+});
+
 // GET /api/market-events/types - Get event type summary
 marketEventsRouter.get('/types', async (_req, res) => {
   try {
