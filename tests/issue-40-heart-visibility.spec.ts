@@ -19,8 +19,8 @@ test.describe('Issue #40: Heart Button Visibility & Alpha Column', () => {
     await page.waitForLoadState('networkidle');
 
     // Navigate to Screener / Upcoming Opportunities
-    await page.click('a:has-text("Screener")');
-    await page.waitForURL('**/#screener');
+    await page.click('a:has-text("Upcoming Opportunities")');
+    await page.waitForURL('**/#upcoming');
     await page.waitForTimeout(500);
   });
 
@@ -51,29 +51,67 @@ test.describe('Issue #40: Heart Button Visibility & Alpha Column', () => {
     test('should show unfilled heart for non-favorited patterns', async ({ page }) => {
       await page.waitForSelector('table tbody tr');
 
-      const firstRow = page.locator('table tbody tr').first();
-      const heartBtn = firstRow.locator('[data-testid="favorite-pattern-button"], button[title*="favorite" i]').first();
+      // Find a row with an unfilled heart (not favorited)
+      const rows = page.locator('table tbody tr');
+      const rowCount = await rows.count();
 
-      // Heart should have outline style (not filled)
-      const svg = heartBtn.locator('svg');
-      const fill = await svg.getAttribute('fill');
-      expect(fill).toBe('none');
+      let foundUnfilled = false;
+      for (let i = 0; i < Math.min(10, rowCount); i++) {
+        const row = rows.nth(i);
+        const heartBtn = row.locator('[data-testid="favorite-pattern-button"]').first();
+        const svg = heartBtn.locator('svg');
+        const fill = await svg.getAttribute('fill');
+
+        if (fill === 'none') {
+          foundUnfilled = true;
+          expect(fill).toBe('none');
+          break;
+        }
+      }
+
+      expect(foundUnfilled).toBe(true);
     });
 
     test('should show filled heart after clicking to favorite', async ({ page }) => {
       await page.waitForSelector('table tbody tr');
 
-      const firstRow = page.locator('table tbody tr').first();
-      const heartBtn = firstRow.locator('[data-testid="favorite-pattern-button"], button[title*="favorite" i]').first();
+      // Find a row with an unfilled heart to toggle
+      const rows = page.locator('table tbody tr');
+      const rowCount = await rows.count();
 
-      // Click to favorite
-      await heartBtn.click();
-      await page.waitForTimeout(300);
+      for (let i = 0; i < Math.min(10, rowCount); i++) {
+        const row = rows.nth(i);
+        const heartBtn = row.locator('[data-testid="favorite-pattern-button"]').first();
+        const svg = heartBtn.locator('svg');
+        const fill = await svg.getAttribute('fill');
 
-      // Heart should now be filled
-      const svg = heartBtn.locator('svg');
-      const fill = await svg.getAttribute('fill');
-      expect(fill).toBe('currentColor');
+        if (fill === 'none') {
+          // Click to favorite
+          await heartBtn.click();
+
+          // Heart should now be filled
+          await expect(svg).toHaveAttribute('fill', 'currentColor', { timeout: 5000 });
+
+          // Toggle back to clean up
+          await heartBtn.click();
+          await page.waitForTimeout(300);
+          return;
+        }
+      }
+
+      // If no unfilled found, the test should still pass if we can toggle one
+      const firstHeartBtn = rows.first().locator('[data-testid="favorite-pattern-button"]').first();
+      const firstFill = await firstHeartBtn.locator('svg').getAttribute('fill');
+
+      if (firstFill === 'currentColor') {
+        // Already favorited - toggle off then on
+        await firstHeartBtn.click();
+        await page.waitForTimeout(300);
+        await firstHeartBtn.click();
+        await expect(firstHeartBtn.locator('svg')).toHaveAttribute('fill', 'currentColor', { timeout: 5000 });
+        // Clean up
+        await firstHeartBtn.click();
+      }
     });
 
     test('should have tooltip explaining pattern favorite', async ({ page }) => {
@@ -213,28 +251,77 @@ test.describe('Issue #40: Heart Button Visibility & Alpha Column', () => {
     test('should persist favorite state after page reload', async ({ page }) => {
       await page.waitForSelector('table tbody tr');
 
-      // Favorite a pattern
-      const firstRow = page.locator('table tbody tr').first();
-      const heartBtn = firstRow.locator('[data-testid="favorite-pattern-button"], button[title*="favorite" i]').first();
+      // Find an unfavorited pattern to test with
+      const rows = page.locator('table tbody tr');
+      const rowCount = await rows.count();
+
+      let testRowIndex = -1;
+      let wasAlreadyFavorited = false;
+
+      for (let i = 0; i < Math.min(10, rowCount); i++) {
+        const row = rows.nth(i);
+        const heartBtn = row.locator('[data-testid="favorite-pattern-button"]').first();
+        const svg = heartBtn.locator('svg');
+        const fill = await svg.getAttribute('fill');
+
+        if (fill === 'none') {
+          testRowIndex = i;
+          break;
+        }
+      }
+
+      // If no unfavorited found, use first row but note it was already favorited
+      if (testRowIndex === -1) {
+        testRowIndex = 0;
+        wasAlreadyFavorited = true;
+      }
+
+      const testRow = rows.nth(testRowIndex);
+      const heartBtn = testRow.locator('[data-testid="favorite-pattern-button"]').first();
+
+      // Get the ticker text to identify this row after reload
+      const tickerText = await testRow.locator('td').nth(2).textContent();
+
+      // Click to favorite (or unfavorite if already favorited)
       await heartBtn.click();
       await page.waitForTimeout(500);
 
-      // Verify it's favorited
-      let svg = heartBtn.locator('svg');
-      let fill = await svg.getAttribute('fill');
-      expect(fill).toBe('currentColor');
+      // Determine expected state after click
+      const expectedFill = wasAlreadyFavorited ? 'none' : 'currentColor';
+      await expect(heartBtn.locator('svg')).toHaveAttribute('fill', expectedFill, { timeout: 5000 });
+
+      // Wait for API to persist
+      await page.waitForTimeout(1000);
 
       // Reload
       await page.reload();
-      await page.click('a:has-text("Screener")');
-      await page.waitForURL('**/#screener');
+      await page.waitForLoadState('networkidle');
+      await page.click('a:has-text("Upcoming Opportunities")');
+      await page.waitForURL('**/#upcoming');
       await page.waitForSelector('table tbody tr');
 
-      // Heart should still be filled
-      const heartBtnAfter = page.locator('table tbody tr').first().locator('[data-testid="favorite-pattern-button"], button[title*="favorite" i]').first();
-      svg = heartBtnAfter.locator('svg');
-      fill = await svg.getAttribute('fill');
-      expect(fill).toBe('currentColor');
+      // Find the same ticker row and verify state persisted
+      const rowsAfter = page.locator('table tbody tr');
+      const rowCountAfter = await rowsAfter.count();
+
+      let found = false;
+      for (let i = 0; i < rowCountAfter; i++) {
+        const row = rowsAfter.nth(i);
+        const rowTickerText = await row.locator('td').nth(2).textContent();
+
+        if (rowTickerText === tickerText) {
+          const heartBtnAfter = row.locator('[data-testid="favorite-pattern-button"]').first();
+          await expect(heartBtnAfter.locator('svg')).toHaveAttribute('fill', expectedFill, { timeout: 5000 });
+          found = true;
+
+          // Clean up: toggle back to original state
+          await heartBtnAfter.click();
+          await page.waitForTimeout(500);
+          break;
+        }
+      }
+
+      expect(found).toBe(true);
     });
   });
 });
