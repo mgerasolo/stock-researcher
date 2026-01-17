@@ -153,11 +153,13 @@ GROUP BY s.ticker, s.name, s.tier;
 -- USER PREFERENCES (Single-user system)
 -- ================================================
 
--- Ticker Sentiment (thumbs up/down)
+-- Ticker Sentiment (thumbs up/down/investigate)
 -- No rows = neutral (default state)
 CREATE TABLE IF NOT EXISTS ticker_sentiment (
     ticker VARCHAR(10) PRIMARY KEY,
-    sentiment VARCHAR(10) NOT NULL CHECK (sentiment IN ('up', 'down')),
+    sentiment VARCHAR(15) NOT NULL CHECK (sentiment IN ('up', 'down', 'investigate')),
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

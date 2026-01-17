@@ -47,7 +47,7 @@ interface ScreenerResponse {
   };
 }
 
-export type SentimentFilter = 'hide-avoided' | 'all' | 'favorites-only';
+export type SentimentFilter = 'hide-avoided' | 'all' | 'favorites-only' | 'investigate-only';
 export type TickerSentiment = 'up' | 'down' | 'investigate' | null;
 
 interface ScreenerPageProps {
@@ -157,6 +157,9 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
     } else if (sentimentFilter === 'favorites-only') {
       // Only show tickers with 'up' sentiment
       filtered = filtered.filter(r => tickerSentiments[r.ticker] === 'up');
+    } else if (sentimentFilter === 'investigate-only') {
+      // Only show tickers with 'investigate' sentiment
+      filtered = filtered.filter(r => tickerSentiments[r.ticker] === 'investigate');
     }
     // 'all' shows everything
 
@@ -487,6 +490,18 @@ export function ScreenerPage({ calcMethod: initialCalcMethod, onSelectTicker, up
                 title="Only show tickers you've liked"
               >
                 👍 Only
+              </button>
+              <button
+                onClick={() => setSentimentFilter('investigate-only')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
+                  sentimentFilter === 'investigate-only'
+                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+                title="Only show tickers marked for investigation"
+                data-testid="investigate-filter"
+              >
+                ? Only
               </button>
             </div>
           </div>
