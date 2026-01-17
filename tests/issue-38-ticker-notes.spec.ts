@@ -20,9 +20,9 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
     await page.waitForLoadState('networkidle');
 
     // Add a ticker to sentiment (like AAPL) first
-    const searchInput = page.getByRole('textbox', { name: /Search for a stock ticker/i });
+    const searchInput = page.locator('input[placeholder*="Search"]').first();
     await searchInput.fill('AAPL');
-    const result = page.getByRole('button', { name: /AAPL.*Tier/i });
+    const result = page.locator('button:has-text("AAPL")').first();
     await result.click();
     await page.waitForSelector('text=Best Entry Months', { timeout: 15000 });
 
@@ -38,7 +38,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
     test('should show note edit button next to each ticker', async ({ page }) => {
       // Navigate to My Tickers
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Should have a note button for the ticker
@@ -48,7 +48,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
 
     test('should allow adding notes inline', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Click note button to expand inline editor
@@ -74,7 +74,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
 
     test('should show note preview truncated to ~50 characters', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Add a long note
@@ -98,7 +98,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
 
     test('should expand to show full note and absolute date', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Add a note first
@@ -122,13 +122,13 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
       await expect(fullNote).toBeVisible();
 
       // Should show absolute date (e.g., "Jan 14, 2026" or "Added: Jan 14, 2026")
-      const dateElement = page.locator('[data-testid="ticker-date"], text=/\\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\\s+\\d{1,2},\\s+\\d{4}\\b/');
-      await expect(dateElement.first()).toBeVisible();
+      const dateElement = page.locator('[data-testid="ticker-date"]').first();
+      await expect(dateElement).toBeVisible();
     });
 
     test('should not show relative dates', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Check that no relative date formats appear
@@ -141,21 +141,21 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
     test('should show notes section for sentiment tickers', async ({ page }) => {
       // AAPL should already be liked from beforeEach
       // Navigate to stock page
-      const searchInput = page.getByRole('textbox', { name: /Search for a stock ticker/i });
+      const searchInput = page.locator('input[placeholder*="Search"]').first();
       await searchInput.fill('AAPL');
-      const result = page.getByRole('button', { name: /AAPL.*Tier/i });
+      const result = page.locator('button:has-text("AAPL")').first();
       await result.click();
       await page.waitForSelector('text=Best Entry Months', { timeout: 15000 });
 
       // Should see "My Notes" section
-      const notesSection = page.locator('text=/My Notes/i, [data-testid="stock-notes-section"]');
-      await expect(notesSection.first()).toBeVisible();
+      const notesSection = page.locator('[data-testid="stock-notes-section"]').or(page.locator('text="My Notes"')).first();
+      await expect(notesSection).toBeVisible();
     });
 
     test('should allow editing notes from stock page', async ({ page }) => {
-      const searchInput = page.getByRole('textbox', { name: /Search for a stock ticker/i });
+      const searchInput = page.locator('input[placeholder*="Search"]').first();
       await searchInput.fill('AAPL');
-      const result = page.getByRole('button', { name: /AAPL.*Tier/i });
+      const result = page.locator('button:has-text("AAPL")').first();
       await result.click();
       await page.waitForSelector('text=Best Entry Months', { timeout: 15000 });
 
@@ -177,13 +177,23 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
       await expect(savedNote).toBeVisible();
     });
 
-    test('should not show notes section for non-sentiment tickers', async ({ page }) => {
+    test('should not show notes section for non-sentiment tickers', async ({ page, request }) => {
+      // Ensure MSFT has no sentiment (clear any leftover from previous tests)
+      await request.delete('/api/ticker-sentiment/MSFT');
+
+      // Reload page to clear any cached sentiment data
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+
       // Search for a ticker we haven't added to sentiment
-      const searchInput = page.getByRole('textbox', { name: /Search for a stock ticker/i });
+      const searchInput = page.locator('input[placeholder*="Search"]').first();
       await searchInput.fill('MSFT');
-      const result = page.getByRole('button', { name: /MSFT.*Tier/i });
+      const result = page.locator('button:has-text("MSFT")').first();
       await result.click();
       await page.waitForSelector('text=Best Entry Months', { timeout: 15000 });
+
+      // Wait for page to stabilize
+      await page.waitForTimeout(500);
 
       // Notes section should not be visible for neutral tickers
       const notesSection = page.locator('[data-testid="stock-notes-section"]');
@@ -194,7 +204,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
   test.describe('Persistence & Validation', () => {
     test('should persist notes after page reload', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Add a note
@@ -210,18 +220,22 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
 
       // Reload page
       await page.reload();
+      await page.waitForLoadState('networkidle');
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
+
+      // Wait for data to load by checking for AAPL ticker
+      await page.waitForSelector('text=AAPL', { timeout: 10000 });
       await page.waitForTimeout(500);
 
-      // Note should still be there
+      // Note should still be there (in preview or expanded)
       const savedNote = page.locator('text=Persistence test');
-      await expect(savedNote).toBeVisible();
+      await expect(savedNote.first()).toBeVisible({ timeout: 10000 });
     });
 
     test('should enforce 2000 character limit', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Open note editor
@@ -242,7 +256,7 @@ test.describe('Issue #38: Ticker Notes Feature', () => {
 
     test('should allow clearing notes', async ({ page }) => {
       await page.click('a:has-text("My Tickers")');
-      await page.waitForURL('**/#sentiment');
+      await page.waitForURL('**/#my-tickers');
       await page.waitForTimeout(500);
 
       // Add a note first
