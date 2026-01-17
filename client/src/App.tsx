@@ -705,6 +705,11 @@ function App() {
               handleSelectTicker(ticker);
               navigateTo('search', ticker);
             }}
+            favorites={favorites}
+            onSelectPattern={(ticker, month, holdingPeriod) => {
+              handleSelectTicker(ticker);
+              navigateTo('search', ticker, { entryMonth: month, holdingPeriod });
+            }}
           />
         )}
 
